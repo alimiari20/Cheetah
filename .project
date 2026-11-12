@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>exercise_05</name>
-	<comment></comment>
+	<name>CheetahLudo</name>
+	<comment>Native Java Swing MVC Ludo game</comment>
 	<projects>
 	</projects>
 	<buildSpec>
