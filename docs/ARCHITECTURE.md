@@ -1,12 +1,12 @@
 # Cheetah Ludo — MVC architecture (GUI edition)
 
-**Model** (pure Java) → `src/com/cheetahludo/model`: boards, dice, players, GameSession, GameEngine, exact-finish, capture, double-block, special-square rules and question DTOs.
+**Model** (pure Java) → `src/model`: boards, dice, players, GameSession, GameEngine, exact-finish, capture, double-block, special-square rules and question DTOs.
 
-**Controller** (Swing event orchestration) → `src/com/cheetahludo/controller/GameController.java`: subscribes to GameFrame.Actions; chooses screen flow, handles dialog results, delegates move/turn rules to GameEngine, delegates file storage to repositories, refreshes view after state changes.
+**Controller** (Swing event orchestration) → `src/controller/GameController.java`: subscribes to GameFrame.Actions; chooses screen flow, handles dialog results, delegates move/turn rules to GameEngine, delegates file storage to repositories, refreshes view after state changes.
 
-**View** (Swing only) → `src/com/cheetahludo/view`: GameFrame hosts a CardLayout of main menu, setup, game board, history and administration; separate FirstPlayerDialog and QuestionDialog are modal; `BoardPanel` paints the state and emits piece-ID selections; Theme/UiKit share visual components.
+**View** (Swing only) → `src/view`: GameFrame hosts a CardLayout of main menu, setup, game board, history and administration; separate FirstPlayerDialog and QuestionDialog are modal; `BoardPanel` paints the state and emits piece-ID selections; Theme/UiKit share visual components.
 
-**Services** → `src/com/cheetahludo/service`: HistoryRepository saves/results/exports local history; QuestionRepository persists editable question bank and enforces 30-question minimum.
+**Repositories** → `src/model` (HistoryRepository, QuestionRepository): HistoryRepository saves/results/exports local history; QuestionRepository persists editable question bank and enforces 30-question minimum.
 
 ## A typical move
 

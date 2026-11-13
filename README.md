@@ -65,10 +65,10 @@ The 32 original questions are bundled. Your locally edited question bank is read
 
 ## Where to edit (strict MVC)
 
-- **Model**: `src/com/cheetahludo/model/` — game state, boards, turns, dice, moves, rules, piece captures, questions.
-- **Controller**: `src/com/cheetahludo/controller/GameController.java` — user actions and modal orchestration.
-- **View / GUI**: `src/com/cheetahludo/view/` — every screen and widget, with shared styles in `Theme.java` and `UiKit.java`.
-- **Services**: `src/com/cheetahludo/service/` — local CSV match history and question bank persistence.
+- **Model**: `src/model/` — game state, boards, turns, dice, moves, rules, piece captures, questions.
+- **Controller**: `src/controller/GameController.java` — user actions and modal orchestration.
+- **View / GUI**: `src/view/` — every screen and widget, with shared styles in `Theme.java` and `UiKit.java`.
+- **Repositories**: `src/model/` (HistoryRepository, QuestionRepository) — local CSV match history and question bank persistence.
 
 ### Change the look
 

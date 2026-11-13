@@ -18,15 +18,7 @@
                includeantruntime="false" debug="true">
             <classpath><pathelement location="${build.dir}"/></classpath>
         </javac>
-        <java classname="com.cheetahludo.model.EngineTests" fork="true" failonerror="true">
-            <sysproperty key="java.awt.headless" value="true"/>
-            <classpath><pathelement location="${build.dir}"/></classpath>
-        </java>
-        <java classname="com.cheetahludo.model.ColorSelectionTests" fork="true" failonerror="true">
-            <sysproperty key="java.awt.headless" value="true"/>
-            <classpath><pathelement location="${build.dir}"/></classpath>
-        </java>
-        <java classname="com.cheetahludo.service.RepositoryTests" fork="true" failonerror="true">
+        <java classname="model.RepositoryTests" fork="true" failonerror="true">
             <sysproperty key="java.awt.headless" value="true"/>
             <classpath><pathelement location="${build.dir}"/></classpath>
         </java>
