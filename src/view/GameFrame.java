@@ -38,6 +38,13 @@ public final class GameFrame extends JFrame {
     private final JLabel turnLabel=Theme.label("Player 1",14,Font.BOLD,Theme.GOLD);
     private final JLabel turnCounter=Theme.label("TURN 01",11,Font.BOLD,Theme.MUTED);
     private final JLabel diceDetails=Theme.label("Roll to begin",12,Font.BOLD,Theme.WHITE);
+    private final JLabel movementTitle =
+    	    Theme.label("AVAILABLE MOVES", 11, Font.BOLD, Theme.MUTED);
+    private final JLabel resultValue =
+    	    Theme.label("–", 30, Font.BOLD, Theme.GOLD);
+
+    	private final JLabel movementValue =
+    			Theme.label("READY", 14, Font.BOLD, Theme.GOLD);
     private final JLabel phaseLabel=Theme.label("READY TO ROLL",12,Font.BOLD,Theme.SUCCESS);
     private final JLabel instruction=Theme.label("Choose Roll Dice to begin",13,Font.BOLD,Theme.MUTED);
     private final JButton rollButton=Theme.button("ROLL DICE  ⚄",true);
@@ -46,6 +53,8 @@ public final class GameFrame extends JFrame {
     private final JPanel rightPlayers=UiKit.transparent();
     private final DieFace regularFace=new DieFace(),specialFace=new DieFace();
     private final JLabel multiplier=Theme.label("",12,Font.BOLD,Theme.GOLD);
+    private final JLabel specialDieLabel =
+    	    Theme.label("BOOST DIE", 11, Font.BOLD, Theme.MUTED);
     private final JTextArea activity=UiKit.area("",4);
     private final JButton adminSwitch=Theme.button("GUEST MODE  ▾",false);
     private final JButton adminTools=Theme.button("QUESTION MANAGEMENT",false);
@@ -122,17 +131,12 @@ public final class GameFrame extends JFrame {
         JButton menu=Theme.button("⌂  MENU",false);menu.addActionListener(e->{if(actions!=null)actions.showMenu();});
         JButton exit=Theme.button("EXIT GAME",false);exit.addActionListener(e->{if(actions!=null)actions.showMenu();});
         head.add(menu,BorderLayout.WEST);head.add(exit,BorderLayout.EAST);
-        JPanel title=UiKit.transparent(new GridLayout(2,1,0,1));
+        JPanel title=UiKit.transparent(new GridLayout(1,1));
         modeLabel.setHorizontalAlignment(SwingConstants.CENTER);title.add(modeLabel);
-        JLabel subtitle=UiKit.sub("CHEETAH LUDO  •  LIVE LOCAL MATCH");title.add(subtitle);
+        JLabel subtitle=UiKit.sub("CHEETAH LUDO ");title.add(subtitle);
         head.add(title,BorderLayout.CENTER);
-        JPanel ribbon=UiKit.transparent(new FlowLayout(FlowLayout.CENTER,12,1));
-        ribbon.add(UiKit.chip("★ Safe Squares",Theme.GOLD));
-        ribbon.add(UiKit.chip("? Question Squares",Theme.SUCCESS));
-        ribbon.add(UiKit.chip("▣ Surprise Squares",new Color(235,122,255)));
-        ribbon.add(turnCounter);
-        JPanel headWrap=UiKit.transparent(new BorderLayout(0,5));headWrap.add(head,BorderLayout.NORTH);headWrap.add(ribbon,BorderLayout.SOUTH);
-        root.add(headWrap,BorderLayout.NORTH);
+        
+        root.add(head, BorderLayout.NORTH);
 
         JPanel arena=UiKit.transparent(new BorderLayout(12,0));
         leftPlayers.setLayout(new BoxLayout(leftPlayers,BoxLayout.Y_AXIS));
@@ -145,18 +149,76 @@ public final class GameFrame extends JFrame {
         boardShell.add(boardPanel,BorderLayout.CENTER);arena.add(boardShell,BorderLayout.CENTER);
         root.add(arena,BorderLayout.CENTER);
 
-        JPanel hud=new UiKit.GlassCard(new BorderLayout(13,0));hud.setBorder(new EmptyBorder(11,17,12,17));
-        JPanel dice=UiKit.transparent(new FlowLayout(FlowLayout.LEFT,8,0));
-        dice.add(regularFace);dice.add(multiplier);dice.add(specialFace);
-        JPanel diceNumbers=UiKit.transparent(new GridLayout(3,1,0,3));
-        diceNumbers.add(UiKit.goldLabel("DICE & MOVEMENT"));diceNumbers.add(diceDetails);diceNumbers.add(turnLabel);
-        dice.add(diceNumbers);hud.add(dice,BorderLayout.WEST);
-        JPanel status=UiKit.transparent(new GridLayout(2,1,0,5));
-        phaseLabel.setHorizontalAlignment(SwingConstants.CENTER);instruction.setHorizontalAlignment(SwingConstants.CENTER);
-        status.add(phaseLabel);status.add(instruction);hud.add(status,BorderLayout.CENTER);
-        JPanel controls=UiKit.transparent(new GridLayout(2,1,0,7));
-        controls.add(rollButton);controls.add(passButton);controls.setPreferredSize(new Dimension(184,91));hud.add(controls,BorderLayout.EAST);
-        root.add(hud,BorderLayout.SOUTH);return root;
+
+        JPanel hud = new UiKit.GlassCard(new BorderLayout(18, 0));
+
+hud.setBorder(BorderFactory.createCompoundBorder(
+    BorderFactory.createLineBorder(Theme.GOLD, 3, true),
+    new EmptyBorder(10, 13, 10, 13)
+));
+
+// Dice section
+JPanel dice = UiKit.transparent(
+	    new FlowLayout(FlowLayout.LEFT, 10, 0)
+	);
+dice.add(regularFace);
+
+JPanel dieInfo = UiKit.transparent(new GridLayout(2, 1, 0, 3));
+dieInfo.add(UiKit.goldLabel("REGULAR DIE"));
+dieInfo.add(turnLabel);
+dice.add(dieInfo);
+JPanel specialGroup = UiKit.transparent(
+	    new BorderLayout(0, 3)
+	);
+
+	specialGroup.add(specialDieLabel, BorderLayout.NORTH);
+	specialGroup.add(specialFace, BorderLayout.CENTER);
+
+	dice.add(specialGroup);
+	dice.add(multiplier);
+
+hud.add(dice, BorderLayout.WEST);
+
+// Result and movement
+JPanel result = UiKit.transparent(new GridLayout(2, 2, 12, 4));
+
+JLabel resultTitle = Theme.label("REGULAR ROLL", 11, Font.BOLD, Theme.MUTED);
+
+
+result.add(resultTitle);
+result.add(movementTitle);
+result.add(resultValue);
+result.add(movementValue);
+
+result.setPreferredSize(new Dimension(300, 76));
+
+// Status messages
+JPanel status = UiKit.transparent(new BorderLayout(10, 0));
+status.add(result, BorderLayout.WEST);
+
+JPanel messages = UiKit.transparent(new GridLayout(2, 1, 0, 3));
+
+phaseLabel.setHorizontalAlignment(SwingConstants.CENTER);
+instruction.setHorizontalAlignment(SwingConstants.CENTER);
+
+messages.add(phaseLabel);
+messages.add(instruction);
+
+status.add(messages, BorderLayout.CENTER);
+hud.add(status, BorderLayout.CENTER);
+
+// Buttons
+JPanel controls = UiKit.transparent(new GridLayout(2, 1, 0, 7));
+
+controls.add(rollButton);
+controls.add(passButton);
+controls.setPreferredSize(new Dimension(184, 91));
+
+hud.add(controls, BorderLayout.EAST);
+
+root.add(hud, BorderLayout.SOUTH);
+return root;
+
     }
     public void render(GameSession session){
         boardPanel.setSession(session);modeLabel.setText("★  "+session.difficulty().label().toUpperCase()+"  ★");
@@ -171,14 +233,79 @@ public final class GameFrame extends JFrame {
         passButton.setEnabled(session.phase()==GameSession.Phase.SELECT_PIECE&&session.legalPieceIds().isEmpty());
         DiceRoll roll=session.dice();regularFace.setValue(roll==null?0:roll.regular());specialFace.setValue(roll==null?0:roll.special());
         boolean showSpecial=session.difficulty()!=Difficulty.EASY||(roll!=null&&roll.ultraBoost());
-        specialFace.setVisible(showSpecial);multiplier.setText(showSpecial?"×":"CLASSIC");
+        specialDieLabel.setVisible(showSpecial);
+        specialFace.setVisible(showSpecial);
+
+        specialDieLabel.setText(
+            session.difficulty() == Difficulty.HARD
+                ? "ULTRABOOST DIE"
+                : "BOOST DIE"
+        );
+
+        multiplier.setText(
+            showSpecial && roll != null
+                ? "×" + roll.multiplier()
+                : ""
+        );
         diceDetails.setText(roll==null?"READY TO ROLL":"MOVEMENT  "+roll.movement()+"  (×"+roll.multiplier()+")");
-        String text=session.status();
-        if(text.length()>100)text=text.substring(0,97)+"…";
-        instruction.setText(text);
+        resultValue.setText(
+        	    roll == null ? "–" : Integer.toString(roll.regular())
+        	);
+
+        movementValue.setText(availableMovesText(session));
+        	boolean advanced = session.difficulty() != Difficulty.EASY;
+
+        	movementTitle.setVisible(advanced);
+        	movementValue.setVisible(advanced);
+
+String text;
+
+if (session.phase() == GameSession.Phase.FINISHED) {
+    text = "Game completed!";
+} else if (session.phase() == GameSession.Phase.ROLL) {
+    text = "Roll the dice to begin.";
+} else if (session.legalPieceIds().isEmpty()) {
+    text = "NO LEGAL MOVES — PASS TURN";
+} else {
+    text = "Select a glowing piece to move.";
+}
+
+instruction.setText(text);
+
         updatePlayers(session);arenaRepaint();
     }
     private void arenaRepaint(){screens.revalidate();screens.repaint();}
+    private String availableMovesText(GameSession session) {
+        if (session.phase() != GameSession.Phase.SELECT_PIECE
+                || session.dice() == null) {
+            return "–";
+        }
+
+        boolean canExit = false;
+        boolean canMove = false;
+
+        for (String id : session.legalPieceIds()) {
+            Piece piece = session.findPiece(id);
+            if (piece == null) continue;
+
+            if (piece.state() == Piece.State.CASTLE) {
+                canExit = true;
+            } else {
+                canMove = true;
+            }
+        }
+
+        if (canExit && canMove) {
+        	return session.dice().movement() + " OR EXIT";
+        }
+        if (canExit) {
+            return "CASTLE EXIT";
+        }
+        if (canMove) {
+            return session.dice().movement() + " squares";
+        }
+        return "NO LEGAL MOVES";
+    }
     private void updatePlayers(GameSession session){
         leftPlayers.removeAll();rightPlayers.removeAll();
         for(int i=0;i<session.players().size();i++){
@@ -188,6 +315,12 @@ public final class GameFrame extends JFrame {
             card.setPreferredSize(new Dimension(182,105));
             card.setMaximumSize(new Dimension(185,115));
             boolean active=p==session.current()&&session.phase()!=GameSession.Phase.FINISHED;
+            if (active) {
+                card.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(Theme.GOLD, 3, true),
+                    new EmptyBorder(9, 9, 8, 9)
+                ));
+            }
             JLabel name=Theme.label("●  "+p.name(),12,Font.BOLD,active?Theme.GOLD:Theme.WHITE);
             name.setForeground(active?Theme.GOLD:Theme.player(p.color()));card.add(name,BorderLayout.NORTH);
             JPanel circles=UiKit.transparent(new FlowLayout(FlowLayout.LEFT,5,0));

@@ -147,11 +147,15 @@ public final class GameController implements GameFrame.Actions {
         if(square==null || !visited.add(squareId)) return;
         // Only the landed square can trigger an event. Neither arrows nor stars reroute pieces.
         if("question".equals(square.symbol())) {
-            Difficulty questionDifficulty=switch(square.specialColor()) {
-                case "yellow" -> Difficulty.EASY;
-                case "green" -> Difficulty.HARD;
-                default -> Difficulty.MEDIUM;
-            };
+
+Difficulty questionDifficulty = switch (square.specialColor()) {
+    case "green" -> Difficulty.EASY;
+    case "yellow" -> Difficulty.MEDIUM;
+    case "red" -> Difficulty.HARD;
+    default -> throw new IllegalStateException(
+        "Unknown question square color: " + square.specialColor());
+};
+
             Question question=questions.next(questionDifficulty);
             resolvingDialog=true;
             boolean correct;

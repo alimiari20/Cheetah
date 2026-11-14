@@ -14,6 +14,15 @@ import java.util.function.Consumer;
 /** HiDPI-friendly scalable, clickable Ludo board. Painting never changes game state. */
 public final class BoardPanel extends JPanel {
     private GameSession session;
+    private float glowPhase = 0f;
+
+    private final javax.swing.Timer glowTimer =
+        new javax.swing.Timer(40, e -> {
+            if (session != null && !session.legalPieceIds().isEmpty()) {
+                glowPhase += 0.12f;
+                repaint();
+            }
+        });
     private Consumer<String> onSelect = id -> {};
     private final List<Hit> hitTargets = new ArrayList<>();
     private record Hit(String id, double x, double y, double radius) {
@@ -23,6 +32,7 @@ public final class BoardPanel extends JPanel {
         setOpaque(false);
         setBackground(Theme.SURFACE);
         setPreferredSize(new Dimension(710,710));
+        glowTimer.start();
         MouseAdapter mouse = new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 for (int i=hitTargets.size()-1;i>=0;i--) if(hitTargets.get(i).contains(e.getX(),e.getY())) {
@@ -354,9 +364,32 @@ private void drawCastles(Graphics2D d, Board board,
     }
     private void paintPiece(Graphics2D d,Piece p,double cx,double cy,double diameter,boolean legal) {
         double r=diameter/2;
-        if(legal) {
-            d.setColor(new Color(28,207,155,104));
-            d.fill(new Ellipse2D.Double(cx-r-5,cy-r-5,diameter+10,diameter+10));
+        if (legal) {
+            float pulse = (float) ((Math.sin(glowPhase) + 1.0) / 2.0);
+
+            double glowSize = 4 + pulse * 5;
+
+            // Soft outer glow
+            d.setColor(new Color(20, 255, 170, (int)(45 + pulse * 65)));
+            d.fill(new Ellipse2D.Double(
+                cx - r - glowSize,
+                cy - r - glowSize,
+                diameter + glowSize * 2,
+                diameter + glowSize * 2
+            ));
+
+            // Bright pulsing ring
+            d.setColor(new Color(70, 255, 180, (int)(150 + pulse * 105)));
+            d.setStroke(new BasicStroke(
+                (float)(2.0 + pulse * 2.0)
+            ));
+
+            d.draw(new Ellipse2D.Double(
+                cx - r - 3,
+                cy - r - 3,
+                diameter + 6,
+                diameter + 6
+            ));
         }
         d.setColor(new Color(28,44,68,65));
         d.fill(new Ellipse2D.Double(cx-r+1.8,cy-r+3.5,diameter,diameter));

@@ -5,6 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
 /** Local question editing. Bundled 32 questions remain an immutable fallback. */
 public final class QuestionRepository {
     public static final int MINIMUM_QUESTIONS=30;
@@ -12,7 +15,7 @@ public final class QuestionRepository {
     public QuestionRepository(){this(Path.of(System.getProperty("user.home"),".cheetah-ludo","questions.tsv"));}
     public QuestionRepository(Path file){this.file=Objects.requireNonNull(file);}
     public List<Question> list() throws IOException {
-        if(!Files.exists(file))return new QuestionBank(new Random(1)).all();
+    	if (!Files.exists(file)) return readExcel();
         List<Question> result=new ArrayList<>();
         try(BufferedReader r=Files.newBufferedReader(file,StandardCharsets.UTF_8)){
             String line;
@@ -26,6 +29,61 @@ public final class QuestionRepository {
             }
         }catch(IllegalArgumentException e){throw new IOException("Invalid question record: "+e.getMessage(),e);}
         validate(result);return List.copyOf(result);
+    }
+    private List<Question> readExcel() throws IOException {
+        List<Question> result = new ArrayList<>();
+        try (InputStream input = QuestionRepository.class
+                .getResourceAsStream("/data/questions_Cheetah.xlsx")) {
+
+            if (input == null)
+                throw new IOException("Excel file not found");
+
+            try (Workbook workbook = new XSSFWorkbook(input)) {
+                Sheet sheet = workbook.getSheet("Questions");
+                if (sheet == null)
+                    throw new IOException("Questions sheet not found");
+
+                DataFormatter fmt = new DataFormatter();
+
+                for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                    Row row = sheet.getRow(i);
+                    if (row == null) continue;
+
+                    String id = cell(row, 0, fmt);
+                    if (id.isBlank()) continue;
+
+                    Difficulty difficulty = Difficulty.valueOf(
+                            cell(row, 1, fmt).toUpperCase(Locale.ROOT));
+
+                    List<String> choices = new ArrayList<>();
+                    for (int c = 4; c <= 7; c++)
+                        choices.add(cell(row, c, fmt));
+
+                    String answer = cell(row, 8, fmt).toUpperCase(Locale.ROOT);
+                    if (!answer.matches("[A-D]"))
+                        throw new IOException("Invalid answer at row " + (i + 1));
+
+                    result.add(new Question(
+                            id,
+                            difficulty,
+                            cell(row, 2, fmt),
+                            cell(row, 3, fmt),
+                            choices,
+                            answer.charAt(0) - 'A',
+                            cell(row, 9, fmt)));
+                }
+            }
+        } catch (RuntimeException ex) {
+            throw new IOException("Could not read Excel questions", ex);
+        }
+
+        validate(result);
+        return List.copyOf(result);
+    }
+
+    private static String cell(Row row, int column, DataFormatter fmt) {
+        Cell value = row.getCell(column);
+        return value == null ? "" : fmt.formatCellValue(value).trim();
     }
     public void saveAll(List<Question> questions) throws IOException {
         validate(questions);
