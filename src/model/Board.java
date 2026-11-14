@@ -55,7 +55,30 @@ public final class Board {
     public boolean isHome(PlayerColor color, String squareId) { return homes.get(color).contains(squareId); }
     public boolean isSafe(String squareId) {
         Cell square = cell(squareId);
-        return square != null && "star".equals(square.symbol());
+
+        if (square == null) {
+            return false;
+        }
+
+        if ("star".equals(square.symbol())) {
+            return true;
+        }
+
+        if (starts.containsValue(squareId)) {
+            return true;
+        }
+
+        if ("surprise".equals(square.symbol())) {
+            return true;
+        }
+
+        for (PlayerColor color : PlayerColor.values()) {
+            if (isHome(color, squareId)) {
+                return true;
+            }
+        }
+
+        return false;
     }
     public Map<String, Long> symbolCounts() {
         Map<String, Long> counts = new HashMap<>();

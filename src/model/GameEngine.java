@@ -113,7 +113,7 @@ public final class GameEngine {
             steps = firstBlocked > 0 ? firstBlocked - 1 : requested;
             if (steps < 1) throw new IllegalStateException("Move blocked at the first square");
             piece.place(board, piece.pathIndex() + steps);
-            if (piece.state() != Piece.State.FINISHED && firstBlocked == 0 && !board.isSafe(piece.squareId(board))) {
+            if (piece.state() != Piece.State.FINISHED && !board.isSafe(piece.squareId(board)))  {
                 for (Player opponent : session.players()) {
                     if (opponent.color() == player.color()) continue;
                     List<Piece> occupying = new ArrayList<>();
