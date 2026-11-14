@@ -1,0 +1,14 @@
+CHEETAH LUDO: MACOS (INTEL / APPLE SILICON)
+===========================================
+1. Extract the ZIP and open the CheetahLudoEclipse directory.
+2. Install Java JDK 17+ if needed.
+3. Double-click RUN_ON_MAC.command, or from Terminal: bash RUN_ON_MAC.command
+4. The game opens in a separate GUI window.
+
+ECLIPSE
+File > Import > General > Existing Projects into Workspace > choose
+CheetahLudoEclipse folder. Run Main.java as a Java Application, or run
+CheetahLudo-Game.launch. DO NOT select the CheetahLudo-Check launcher to play.
+
+OPTIONAL: Run BUILD_MAC_APP.command (full JDK and jpackage required) to
+create release/CheetahLudo.app with its own Java runtime for that Mac.
