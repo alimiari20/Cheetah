@@ -156,9 +156,17 @@ public final class GameEngine {
             if (index == path.size() - 1) break;
         }
         piece.place(board, index);
+
+        List<String> captures = captureOpponents(session, piece);
+
+        if (!captures.isEmpty()) {
+            session.record(piece.color().label() +
+                " captured " + String.join(", ", captures) + ".");
+        }
+
         registerFinish(session, session.findPlayer(piece.color()));
         return new MoveFeedback("Shifted " + (index - old) + " squares", piece.squareId(board), index - old,
-            List.of(), piece.state() == Piece.State.FINISHED);
+        		captures, piece.state() == Piece.State.FINISHED);
     }
 
     public void resolveQuestion(GameSession session, String pieceId, Question question, boolean correct) {
@@ -304,5 +312,44 @@ public final class GameEngine {
             counts.forEach((square, total) -> { if (total >= 2) blocked.add(square); });
         }
         return blocked;
+    }
+    private List<String> captureOpponents(GameSession session, Piece piece) {
+        List<String> captures = new ArrayList<>();
+
+        if (piece.state() == Piece.State.CASTLE ||
+            piece.state() == Piece.State.FINISHED) {
+            return captures;
+        }
+
+        Board board = session.board();
+        String square = piece.squareId(board);
+
+        if (board.isSafe(square)) {
+            return captures;
+        }
+
+        for (Player opponent : session.players()) {
+            if (opponent.color() == piece.color()) continue;
+
+            List<Piece> occupying = new ArrayList<>();
+
+            for (Piece target : opponent.pieces()) {
+                if ((target.state() == Piece.State.TRACK ||
+                     target.state() == Piece.State.HOME) &&
+                    square.equals(target.squareId(board))) {
+                    occupying.add(target);
+                }
+            }
+
+            if (occupying.size() == 1) {
+                Piece captured = occupying.get(0);
+                captured.returnCastle();
+
+                captures.add(opponent.name() + "'s " +
+                             (captured.number() + 1));
+            }
+        }
+
+        return captures;
     }
 }
