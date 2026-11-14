@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="CheetahLudoPrototypeGUI" default="jar" basedir=".">
+    <property name="build.dir" value="build/classes"/>
+    <property name="dist.dir" value="dist"/>
+    <target name="clean">
+        <delete dir="build"/>
+    </target>
+    <target name="compile">
+        <mkdir dir="${build.dir}"/>
+        <javac srcdir="src" destdir="${build.dir}" release="17" encoding="UTF-8"
+               includeantruntime="false" debug="true"/>
+        <copy todir="${build.dir}">
+<<<<<<< HEAD
+            <fileset dir="src" excludes="*/.java"/>
+=======
+            <fileset dir="src" excludes="**/*.java"/>
+>>>>>>> test
+        </copy>
+    </target>
+    <target name="test" depends="compile">
+        <javac srcdir="test" destdir="${build.dir}" release="17" encoding="UTF-8"
+               includeantruntime="false" debug="true">
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </javac>
+<<<<<<< HEAD
+=======
+        <java classname="model.EngineTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+>>>>>>> test
+        <java classname="model.ColorSelectionTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+        <java classname="model.RepositoryTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+    </target>
+    <target name="jar" depends="test">
+        <mkdir dir="${dist.dir}"/>
+<<<<<<< HEAD
+        <jar destfile="${dist.dir}/CheetahLudo.jar" basedir="${build.dir}" excludes="*/*Tests.class">
+=======
+        <jar destfile="${dist.dir}/CheetahLudo.jar" basedir="${build.dir}" excludes="**/*Tests*.class">
+>>>>>>> test
+            <manifest><attribute name="Main-Class" value="com.cheetahludo.Main"/></manifest>
+        </jar>
+    </target>
+    <target name="run" depends="compile">
+        <java classname="com.cheetahludo.Main" fork="true">
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+    </target>
+<<<<<<< HEAD
+</project>
+=======
+</project>
+>>>>>>> test
