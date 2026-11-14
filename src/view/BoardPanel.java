@@ -106,23 +106,125 @@ public final class BoardPanel extends JPanel {
         catch(IllegalArgumentException ex) { return null; }
     }
 
-    private void drawCastles(Graphics2D d,Board board,double ox,double oy,double s) {
-        for(PlayerColor color:PlayerColor.values()) {
-            int minR=Integer.MAX_VALUE,minC=Integer.MAX_VALUE,maxR=0,maxC=0;
-            for(int i=0;i<4;i++) {
-                Board.Position spot=Board.Position.parse(board.castleSlot(color,i));
-                minR=Math.min(minR,spot.row()); minC=Math.min(minC,spot.column());
-                maxR=Math.max(maxR,spot.row()); maxC=Math.max(maxC,spot.column());
-            }
-            double bx=ox+(minC-1.45)*s,by=oy+(minR-1.45)*s;
-            double width=(maxC-minC+1.9)*s,height=(maxR-minR+1.9)*s;
-            d.setColor(Theme.blend(Theme.player(color),Color.WHITE,.86f));
-            d.fill(new RoundRectangle2D.Double(bx,by,width,height,s*.65,s*.65));
-            d.setColor(Theme.blend(Theme.player(color),Color.WHITE,.15f));
-            d.setStroke(new BasicStroke(Math.max(2.7f,(float)(s*.115))));
-            d.draw(new RoundRectangle2D.Double(bx,by,width,height,s*.65,s*.65));
+
+
+
+private void drawCastles(Graphics2D d, Board board,
+                         double ox, double oy, double s) {
+
+    if (board.difficulty() == Difficulty.EASY ||
+        board.difficulty() == Difficulty.MEDIUM ||
+        board.difficulty() == Difficulty.HARD) {
+
+        PlayerColor[] colors;
+        int[][] corners;
+
+        if (board.difficulty() == Difficulty.EASY) {
+
+            // Easy - unchanged
+            colors = new PlayerColor[] {
+                PlayerColor.GREEN, PlayerColor.YELLOW,
+                PlayerColor.RED, PlayerColor.BLUE
+            };
+
+            corners = new int[][] {
+                {0, 0}, {0, 9}, {9, 0}, {9, 9}
+            };
+
+        } else if (board.difficulty() == Difficulty.MEDIUM) {
+
+            // Medium - unchanged
+            colors = new PlayerColor[] {
+                PlayerColor.RED, PlayerColor.GREEN,
+                PlayerColor.BLUE, PlayerColor.YELLOW
+            };
+
+            corners = new int[][] {
+                {1, 1}, {1, 10}, {10, 1}, {10, 10}
+            };
+
+        } else {
+
+            // Hard - new
+            colors = new PlayerColor[] {
+                PlayerColor.RED, PlayerColor.GREEN,
+                PlayerColor.BLUE, PlayerColor.YELLOW
+            };
+
+            corners = new int[][] {
+                {2, 2}, {2, 11}, {11, 2}, {11, 11}
+            };
         }
+
+        for (int i = 0; i < colors.length; i++) {
+
+            Color color = Theme.player(colors[i]);
+
+            double x = ox + corners[i][1] * s;
+            double y = oy + corners[i][0] * s;
+
+            // Outer castle: 6x6
+            d.setColor(color);
+            d.fill(new Rectangle2D.Double(
+                x, y, 6 * s, 6 * s
+            ));
+
+            // White inner castle
+            double margin = 0.35 * s;
+
+            d.setColor(Color.WHITE);
+            d.fill(new RoundRectangle2D.Double(
+                x + margin, y + margin,
+                6 * s - 2 * margin,
+                6 * s - 2 * margin,
+                s * 0.25, s * 0.25
+            ));
+        }
+
+        return;
     }
+
+    // Original fallback rendering - unchanged
+    for (PlayerColor color : PlayerColor.values()) {
+
+        int minR = Integer.MAX_VALUE, minC = Integer.MAX_VALUE;
+        int maxR = 0, maxC = 0;
+
+        for (int i = 0; i < 4; i++) {
+
+            Board.Position spot =
+                Board.Position.parse(board.castleSlot(color, i));
+
+            minR = Math.min(minR, spot.row());
+            minC = Math.min(minC, spot.column());
+            maxR = Math.max(maxR, spot.row());
+            maxC = Math.max(maxC, spot.column());
+        }
+
+        double bx = ox + (minC - 1.45) * s;
+        double by = oy + (minR - 1.45) * s;
+        double width = (maxC - minC + 1.9) * s;
+        double height = (maxR - minR + 1.9) * s;
+
+        d.setColor(Theme.blend(
+            Theme.player(color), Color.WHITE, .86f));
+
+        d.fill(new RoundRectangle2D.Double(
+            bx, by, width, height, s * .65, s * .65));
+
+        d.setColor(Theme.blend(
+            Theme.player(color), Color.WHITE, .15f));
+
+        d.setStroke(new BasicStroke(
+            Math.max(2.7f, (float)(s * .115))));
+
+        d.draw(new RoundRectangle2D.Double(
+            bx, by, width, height, s * .65, s * .65));
+    }
+}
+
+
+
 
     private void drawGoal(Graphics2D d,Board board,double x,double y,double s) {
         int mid=board.size()/2;

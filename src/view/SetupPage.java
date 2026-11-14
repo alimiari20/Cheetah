@@ -28,18 +28,18 @@ public final class SetupPage extends UiKit.GradientPage {
     private final Consumer<SetupDialog.Config> onStart;
 
     public SetupPage(Runnable onBack, Consumer<SetupDialog.Config> onStart) {
-        super(new BorderLayout(12,14));this.onStart=onStart;
-        setBorder(new EmptyBorder(17,28,22,28));
+        super(new BorderLayout(8,8));this.onStart=onStart;
+        setBorder(new EmptyBorder(8,16,10,16));
         JPanel header=UiKit.transparent(new BorderLayout());
         JButton back=Theme.button("← BACK TO MENU",false);back.addActionListener(e->onBack.run());
-        back.setPreferredSize(new Dimension(192,45));header.add(back,BorderLayout.WEST);
+        back.setPreferredSize(new Dimension(170,36));header.add(back,BorderLayout.WEST);
         JPanel headline=UiKit.transparent(new GridLayout(2,1));
-        headline.add(UiKit.title("GAME SETUP",24));headline.add(UiKit.sub("Choose players, colors and board difficulty"));
+        headline.add(UiKit.title("GAME SETUP",21));headline.add(UiKit.sub("Choose players, colors and board difficulty"));
         header.add(headline,BorderLayout.CENTER);
-        header.add(Box.createHorizontalStrut(170),BorderLayout.EAST);
+        header.add(Box.createHorizontalStrut(140),BorderLayout.EAST);
         add(header,BorderLayout.NORTH);
         JPanel layout=UiKit.transparent(new GridBagLayout());
-        GridBagConstraints c=new GridBagConstraints();c.gridy=0;c.fill=GridBagConstraints.BOTH;c.weighty=1;c.insets=new Insets(5,7,5,7);
+        GridBagConstraints c=new GridBagConstraints();c.gridy=0;c.fill=GridBagConstraints.BOTH;c.weighty=1;c.insets=new Insets(3,5,3,5);
         c.gridx=0;c.weightx=.54;layout.add(form(),c);
         c.gridx=1;c.weightx=.46;layout.add(previewPane(),c);
         JScrollPane scroll=new JScrollPane(layout);scroll.setOpaque(false);scroll.getViewport().setOpaque(false);
@@ -49,21 +49,21 @@ public final class SetupPage extends UiKit.GradientPage {
     }
     public void setPreviewProvider(BiFunction<Difficulty,List<PlayerColor>,GameSession> fn){previewProvider=fn;updatePreview();}
     private JPanel form(){
-        JPanel root=UiKit.transparent(new BorderLayout(0,13));root.setPreferredSize(new Dimension(525,610));
+        JPanel root=UiKit.transparent(new BorderLayout(0,7));root.setPreferredSize(new Dimension(490,490));
         JPanel stack=UiKit.transparent();stack.setLayout(new BoxLayout(stack,BoxLayout.Y_AXIS));
-        JPanel counts=new UiKit.GlassCard(new BorderLayout(0,10));counts.setBorder(new EmptyBorder(16,18,16,18));
+        JPanel counts=new UiKit.GlassCard(new BorderLayout(0,5));counts.setBorder(new EmptyBorder(9,12,9,12));
         counts.add(UiKit.goldLabel("♙  NUMBER OF PLAYERS (2–4)"),BorderLayout.NORTH);
-        JPanel countRow=UiKit.transparent(new GridLayout(1,3,9,0));
+        JPanel countRow=UiKit.transparent(new GridLayout(1,3,6,0));
         for(int i=0;i<3;i++){final int number=i+2;countButtons[i]=Theme.button(number+" Players",false);
             countButtons[i].addActionListener(e->chooseCount(number));countRow.add(countButtons[i]);}
-        counts.add(countRow,BorderLayout.CENTER);counts.setMaximumSize(new Dimension(Integer.MAX_VALUE,100));
-        stack.add(counts);stack.add(Box.createVerticalStrut(12));
-        JPanel people=new UiKit.GlassCard(new BorderLayout(0,10));people.setBorder(new EmptyBorder(15,17,15,17));
+        counts.add(countRow,BorderLayout.CENTER);counts.setMaximumSize(new Dimension(Integer.MAX_VALUE,78));
+        stack.add(counts);stack.add(Box.createVerticalStrut(7));
+        JPanel people=new UiKit.GlassCard(new BorderLayout(0,5));people.setBorder(new EmptyBorder(9,12,9,12));
         people.add(UiKit.goldLabel("PLAYER DETAILS & COLORS"),BorderLayout.NORTH);
-        JPanel rows=UiKit.transparent(new GridLayout(4,1,0,9));
+        JPanel rows=UiKit.transparent(new GridLayout(4,1,0,4));
         PlayerColor[] colors=PlayerColor.values();
         for(int i=0;i<4;i++) {
-            JPanel row=UiKit.transparent(new BorderLayout(10,0));row.setBorder(new EmptyBorder(3,4,3,4));
+            JPanel row=UiKit.transparent(new BorderLayout(6,0));row.setBorder(new EmptyBorder(1,2,1,2));
             JLabel circle=Theme.label("●",22,Font.BOLD,Theme.player(colors[i]));colorMarkers[i]=circle;row.add(circle,BorderLayout.WEST);
             names[i]=UiKit.field("Player "+(i+1));row.add(names[i],BorderLayout.CENTER);
             JPanel choices=UiKit.transparent(new FlowLayout(FlowLayout.RIGHT,2,0));
@@ -76,29 +76,29 @@ public final class SetupPage extends UiKit.GradientPage {
             row.add(choices,BorderLayout.EAST);
             playerRows[i]=row;rows.add(row);
         }
-        people.add(rows,BorderLayout.CENTER);people.setMaximumSize(new Dimension(Integer.MAX_VALUE,280));
-        stack.add(people);stack.add(Box.createVerticalStrut(12));
-        JPanel mode=new UiKit.GlassCard(new BorderLayout(0,9));mode.setBorder(new EmptyBorder(14,17,14,17));
+        people.add(rows,BorderLayout.CENTER);people.setMaximumSize(new Dimension(Integer.MAX_VALUE,225));
+        stack.add(people);stack.add(Box.createVerticalStrut(7));
+        JPanel mode=new UiKit.GlassCard(new BorderLayout(0,5));mode.setBorder(new EmptyBorder(9,12,9,12));
         mode.add(UiKit.goldLabel("CHOOSE BOARD & DIFFICULTY"),BorderLayout.NORTH);
         JPanel modes=UiKit.transparent(new GridLayout(1,3,8,0));
         String[] texts={"EASY  •  15×15", "MEDIUM  •  17×17", "HARD  •  19×19"};
         for(int i=0;i<3;i++){final Difficulty diff=Difficulty.values()[i];
             modeButtons[i]=Theme.button(texts[i],false);modeButtons[i].setFont(Theme.font(11,Font.BOLD));
             modeButtons[i].addActionListener(e->chooseDifficulty(diff));modes.add(modeButtons[i]);}
-        mode.add(modes,BorderLayout.CENTER);mode.setMaximumSize(new Dimension(Integer.MAX_VALUE,92));
+        mode.add(modes,BorderLayout.CENTER);mode.setMaximumSize(new Dimension(Integer.MAX_VALUE,75));
         stack.add(mode);root.add(stack,BorderLayout.CENTER);
         JButton proceed=Theme.button("PROCEED TO FIRST PLAYER ROLL   →",true);
-        proceed.setPreferredSize(new Dimension(400,50));
+        proceed.setPreferredSize(new Dimension(380,40));
         proceed.addActionListener(e->submit());
         root.add(proceed,BorderLayout.SOUTH);return root;
     }
     private JPanel previewPane(){
-        JPanel card=new UiKit.GlassCard(new BorderLayout(0,12));card.setBorder(new EmptyBorder(18,17,18,17));
+        JPanel card=new UiKit.GlassCard(new BorderLayout(0,6));card.setBorder(new EmptyBorder(10,10,10,10));
         JPanel intro=UiKit.transparent(new GridLayout(2,1,0,3));previewTitle.setHorizontalAlignment(SwingConstants.CENTER);
         intro.add(previewTitle);intro.add(UiKit.sub("Board dimensions and piece positions update live"));
         card.add(intro,BorderLayout.NORTH);
         preview.setOpaque(false);preview.setBackground(Theme.SURFACE_2);
-        preview.setPreferredSize(new Dimension(460,460));
+        preview.setPreferredSize(new Dimension(365,365));
         card.add(preview,BorderLayout.CENTER);
         JLabel hint=UiKit.sub("★ Safe squares      ? Questions      ◈ Surprises");card.add(hint,BorderLayout.SOUTH);
         return card;
