@@ -37,6 +37,10 @@ public final class GameFrame extends JFrame {
     private final JLabel modeLabel=UiKit.goldLabel("CLASSIC MODE");
     private final JLabel turnLabel=Theme.label("Player 1",14,Font.BOLD,Theme.GOLD);
     private final JLabel turnCounter=Theme.label("TURN 01",11,Font.BOLD,Theme.MUTED);
+    /** Live total game duration (SRS 3.2.2.3.8), refreshed every second while a match is running. */
+    private final JLabel clockLabel=Theme.label("TIME  00:00",12,Font.BOLD,Theme.GOLD);
+    private final Timer clock=new Timer(1000,e->updateClock());
+    private GameSession clockSession;
     private final JLabel diceDetails=Theme.label("Roll to begin",12,Font.BOLD,Theme.WHITE);
     private final JLabel movementTitle =
     	    Theme.label("AVAILABLE MOVES", 11, Font.BOLD, Theme.MUTED);
@@ -88,7 +92,7 @@ public final class GameFrame extends JFrame {
     }
     public void setActions(Actions a){actions=Objects.requireNonNull(a);}
     public boolean isGameVisible(){return "GAME".equals(currentScreen);}
-    private void show(String key){currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();}
+    private void show(String key){if(!"GAME".equals(key))clock.stop();currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();}
     public void showMainMenu(){show("MENU");}
     public void showSetup(){setupPage.setPreviewProvider((diff,colors)->actions.preview(diff,colors));show("SETUP");}
     public void showGame(){show("GAME");}
@@ -135,6 +139,7 @@ public final class GameFrame extends JFrame {
         modeLabel.setHorizontalAlignment(SwingConstants.CENTER);title.add(modeLabel);
         JLabel subtitle=UiKit.sub("CHEETAH LUDO ");title.add(subtitle);
         head.add(title,BorderLayout.CENTER);
+        clockLabel.setHorizontalAlignment(SwingConstants.CENTER);head.add(clockLabel,BorderLayout.SOUTH);
         
         root.add(head, BorderLayout.NORTH);
 
@@ -272,7 +277,16 @@ if (session.phase() == GameSession.Phase.FINISHED) {
 
 instruction.setText(text);
 
-        updatePlayers(session);arenaRepaint();
+        updatePlayers(session);
+        clockSession=session;updateClock();
+        if(session.phase()==GameSession.Phase.FINISHED)clock.stop();else if(!clock.isRunning())clock.start();
+        arenaRepaint();
+    }
+    private void updateClock(){
+        if(clockSession==null)return;
+        long seconds=Math.max(0,java.time.Duration.between(clockSession.started(),java.time.Instant.now()).getSeconds());
+        long h=seconds/3600,m=(seconds%3600)/60,sec=seconds%60;
+        clockLabel.setText(h>0?String.format("TIME  %d:%02d:%02d",h,m,sec):String.format("TIME  %02d:%02d",m,sec));
     }
     private void arenaRepaint(){screens.revalidate();screens.repaint();}
     private String availableMovesText(GameSession session) {

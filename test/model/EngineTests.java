@@ -179,7 +179,7 @@ public final class EngineTests {
         checkTest("star square prevents capture",()->{
             GameSession s=game();Board b=s.board();
             String star=null;
-            for(String id:b.path(PlayerColor.RED)) if(b.isSafe(id)) {star=id;break;}
+            for(String id:b.path(PlayerColor.RED)) if("star".equals(b.cell(id).symbol())) {star=id;break;}
             yes(star!=null,"Expected safe track square");
             int index=b.path(PlayerColor.RED).indexOf(star);
             yes(index>0,"Safe square should be reachable");
@@ -283,7 +283,7 @@ public final class EngineTests {
             }catch(Exception ex){throw new AssertionError(ex);}
         });
         System.out.println("\n"+passed+" PASSED, "+failed+" FAILED");
-        if(failed>0)System.exit(1);
+        System.exit(failed>0?1:0); // BoardPanel starts a Swing timer, so exit explicitly
     }
     private static void verifyCounts(Difficulty d,long stars,long arrows,long questions,long surprises) {
         Map<String,Long> counts=boards.load(d).symbolCounts();

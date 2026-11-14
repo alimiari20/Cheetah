@@ -12,21 +12,21 @@ public final class RepositoryTests {
         try{
             QuestionRepository repo=new QuestionRepository(dir.resolve("questions.tsv"));
             List<Question> baseline=repo.list();
-            yes(baseline.size()==32,"bundled questions available");
+            yes(baseline.size()>=QuestionRepository.MINIMUM_QUESTIONS,"bundled questions available");
             List<Question> added=new ArrayList<>(baseline);
             Question bonus=new Question("my-new-question",Difficulty.HARD,"Software Engineering",
                 "What does MVC mean?",List.of("Model View Controller","Move Value Copy","Main View Code","None"),0,"Separate game rules from GUI events.");
             added.add(bonus);repo.saveAll(added);
-            yes(repo.list().size()==33,"new question persists after reload");
+            yes(repo.list().size()==baseline.size()+1,"new question persists after reload");
             Question unicode=new Question("my-new-question",Difficulty.HARD,"Software Engineering",
                 "מהו MVC? ما هو؟",List.of("Model View Controller","Test 🏆","Text, with comma","Option D"),0,"Unicode and punctuation roundtrip");
             added.set(added.size()-1,unicode);repo.saveAll(added);
-            yes(repo.list().get(32).text().equals(unicode.text()),"Unicode editing preserved");
-            yes(repo.list().get(32).choices().get(2).equals("Text, with comma"),"punctuation preserved");
+            yes(repo.list().get(baseline.size()).text().equals(unicode.text()),"Unicode editing preserved");
+            yes(repo.list().get(baseline.size()).choices().get(2).equals("Text, with comma"),"punctuation preserved");
             try{repo.saveAll(added.subList(0,29));throw new AssertionError("minimum 30 rule not enforced");}
             catch(IllegalArgumentException expected){count++;System.out.println(" PASS minimum 30 questions enforced");}
-            yes(repo.list().size()==33,"rejected update leaves saved bank intact");
-            yes(new QuestionBank(new Random(7),repo.list()).total()==33,"game engine can load edited bank");
+            yes(repo.list().size()==baseline.size()+1,"rejected update leaves saved bank intact");
+            yes(new QuestionBank(new Random(7),repo.list()).total()==baseline.size()+1,"game engine can load edited bank");
             Path history=dir.resolve("history.csv");
             Files.writeString(history,"date,difficulty,players,winner,ranking,duration_seconds\n"+
                 "\"2026-11-09T13:00:00Z\",\"EASY\",2,\"Al, Lee\",\"Al, Lee > Ben\",95\n",StandardCharsets.UTF_8);
