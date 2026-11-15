@@ -1,0 +1,39 @@
+CHEETAH LUDO - OPEN THE GAME IN ECLIPSE (WINDOWS + MAC)
+=======================================================
+
+This GUI edition has a new Eclipse project name: CheetahLudoPrototypeGUI.
+It does NOT overwrite the old CheetahLudoEclipse project.
+
+1) Unzip the whole archive.
+2) In Eclipse: File > Import > General > Existing Projects into Workspace.
+3) Choose "Select root directory", then Browse to the extracted CheetahLudoPrototypeGUI folder.
+4) You should see a checkbox for CheetahLudoPrototypeGUI; select it and click Finish.
+5) In Package Explorer expand:
+       CheetahLudoPrototypeGUI > src > com.cheetahludo > Main.java
+6) RIGHT-CLICK Main.java > Run As > Java Application.
+   OR right-click CheetahLudo-Game.launch > Run As > CheetahLudo-Game.
+
+The game opens in a separate desktop window, not inside the Console.
+The Console should print: CHEETAH LUDO: Main menu window is now open.
+
+IMPORTANT: Do NOT run the old CheetahLudo-Check configuration.
+If the GREEN RUN button still starts the old project, click its dropdown arrow,
+select the new CheetahLudo-Game config, or right-click Main.java > Run As.
+
+If Eclipse does not show the project:
+- Verify the .project file is in the selected folder.
+- Use File > Import, NOT File > Open File.
+- If it says project already exists, you selected the old copy or already imported this edition.
+- In Package Explorer, right-click project > Refresh; Project > Clean...;
+  set Project > Build Automatically.
+- Run with JDK 17 or newer (Java 23 is fine for this game).
+
+If project launches with a blank Console, choose Window > Show View > Console
+and look for ERROR text. If there is no window, check if it is behind Eclipse.
+
+Alternative (proves the project can run outside Eclipse):
+  Windows: double-click RUN_ON_WINDOWS.bat
+  macOS: open Terminal in this folder, then run: bash RUN_ON_MAC.command
+
+If you still cannot open the game, send a screenshot of the Eclipse Package
+Explorer and Console (include any red error message).
