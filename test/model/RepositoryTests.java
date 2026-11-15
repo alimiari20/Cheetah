@@ -33,6 +33,16 @@ public final class RepositoryTests {
             var records=new HistoryRepository(history).readEntries();
             yes(records.size()==1 && records.get(0).winner().equals("Al, Lee"),"quoted CSV and commas parsed");
             yes(records.get(0).seconds()==95,"history duration parsed");
+            yes(Files.readString(history).startsWith(HistoryRepository.HEADER),"old history file converted to the course template");
+            yes(Files.exists(dir.resolve("history.csv.bak")),"old history file kept as a backup");
+            Path template=dir.resolve("template.csv");
+            Files.writeString(template,HistoryRepository.HEADER+"\n1,hard,19/10/2026;12:01:00 ,Mor,Noy,Safa,Muhammed,01:05:04\n"+
+                "2,easy,20/10/2026;09:15:30,Ali,Lana,,,00:12:07\n",StandardCharsets.UTF_8);
+            var rows=new HistoryRepository(template).readEntries();
+            yes(rows.size()==2,"course template rows read");
+            yes(rows.get(1).winner().equals("Mor") && rows.get(1).players()==4 && rows.get(1).ranking().equals("Mor > Noy > Safa > Muhammed"),"Moodle sample row read");
+            yes(rows.get(1).seconds()==3904 && rows.get(1).difficulty().equals("HARD"),"HH:MM:SS duration and difficulty read");
+            yes(rows.get(0).players()==2 && rows.get(0).seconds()==727,"2-player game leaves 3rd and 4th place empty");
             System.out.println("Repository tests: "+count+" PASSED, 0 FAILED");
         }finally{
             try(var walk=Files.walk(dir)){walk.sorted(Comparator.reverseOrder()).forEach(p->{try{Files.deleteIfExists(p);}catch(Exception ignored){}});}

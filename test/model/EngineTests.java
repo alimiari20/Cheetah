@@ -276,7 +276,8 @@ public final class EngineTests {
                 Path dest=Files.createTempDirectory("cheetah-tests").resolve("match.csv");
                 HistoryRepository h=new HistoryRepository(dest);h.save(s);
                 String txt=Files.readString(dest);
-                yes(txt.contains("difficulty,players,winner"),"CSV header missing");
+                yes(txt.startsWith(HistoryRepository.HEADER),"CSV header must match the course template");
+                yes(txt.contains("\n1,easy,"),"first game gets gameID 1 and lower-case difficulty");
                 yes(txt.contains("Player 1"),"Player missing");
                 Path exported=dest.resolveSibling("export.csv");h.export(exported);
                 eq(txt,Files.readString(exported));
