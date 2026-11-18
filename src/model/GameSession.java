@@ -19,6 +19,9 @@ public final class GameSession {
     private Phase phase = Phase.ROLL;
     private DiceRoll dice;
     private boolean ultraNextRoll;
+    // Earned normal extra rolls wait while immediate surprise rolls resolve.
+    private int pendingExtraRolls;
+    private boolean surpriseRollInProgress;
     private String status = "Roll the dice to begin!";
 
     GameSession(Board board, List<Player> players) {
@@ -37,6 +40,8 @@ public final class GameSession {
     public Phase phase() { return phase; }
     public DiceRoll dice() { return dice; }
     public boolean isUltraNextRoll() { return ultraNextRoll; }
+    public int pendingExtraRolls() { return pendingExtraRolls; }
+    public boolean isSurpriseRollInProgress() { return surpriseRollInProgress; }
     public String status() { return status; }
     public List<String> events() { return Collections.unmodifiableList(events); }
     public Set<String> legalPieceIds() { return Collections.unmodifiableSet(legalPieceIds); }
@@ -50,6 +55,11 @@ public final class GameSession {
     void turn(int value) { turn = value; }
     void consecutiveSixes(int value) { consecutiveSixes = value; }
     void ultraNextRoll(boolean value) { ultraNextRoll = value; }
+    void pendingExtraRolls(int value) {
+        if (value < 0) throw new IllegalArgumentException("Negative extra rolls");
+        pendingExtraRolls = value;
+    }
+    void surpriseRollInProgress(boolean value) { surpriseRollInProgress = value; }
     Set<String> mutableLegalMoves() { return legalPieceIds; }
     Set<PlayerColor> mutableSkips() { return skips; }
     List<PlayerColor> mutableRanking() { return ranking; }
