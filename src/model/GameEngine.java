@@ -151,67 +151,59 @@ public final class GameEngine {
     }
 
     public DiceRoll roll(GameSession session, Random random) {
-
         requirePhase(session, GameSession.Phase.ROLL);
+        Objects.requireNonNull(random, "random");
 
-        int regular = random.nextInt(6) + 1;
-        boolean ultra = session.isUltraNextRoll();
-
-        int sides = ultra
-            ? 6 : session.difficulty().specialSides();
-
-        int special = sides == 1
-            ? 1 : random.nextInt(sides) + 1;
-
-        int multiplier =
-            session.difficulty() == Difficulty.EASY && !ultra
-            ? 1 : special - 1;
-
-        DiceRoll roll = new DiceRoll(
-            regular,
-            special,
-            multiplier,
-            regular * multiplier,
-            ultra
-        );
-
+        // An awarded surprise roll is independent of the ordinary six counter.
+        boolean surprise = session.isUltraNextRoll();
+        DiceStrategy strategy = surprise
+            ? DiceStrategies.surpriseUltraBoost()
+            : DiceStrategies.forDifficulty(session.difficulty());
+        DiceRoll roll = strategy.roll(random);
         session.ultraNextRoll(false);
+        session.surpriseRollInProgress(surprise);
         session.dice(roll);
 
-        int count = regular == 6
-            ? session.consecutiveSixes() + 1 : 0;
+        if (!surprise) {
+            int count = roll.rolledSix()
+                ? session.consecutiveSixes() + 1 : 0;
+            session.consecutiveSixes(count);
 
-        session.consecutiveSixes(count);
-        session.mutableLegalMoves().clear();
-
-        if (count >= 3) {
-
-            session.record(
-                session.current().name()
-                + " rolled three sixes! Turn canceled."
-            );
-
-            advanceTurn(session);
-
-        } else {
-
-            session.mutableLegalMoves().addAll(
-                calculateLegalMoves(session)
-            );
-
-            session.phase(GameSession.Phase.SELECT_PIECE);
-
-            session.record(
-                session.current().name()
-                + " rolled "
-                + roll.description(session.difficulty())
-                + (session.legalPieceIds().isEmpty()
-                    ? ". No legal move — pass the turn."
-                    : ". Select a highlighted piece.")
-            );
+            if (count >= 3) {
+                session.record(session.current().name()
+                        + " rolled three consecutive regular sixes; third roll canceled.");
+                // The third six is not played; no castle exit or movement occurs.
+                advanceTurn(session);
+                return roll;
+            }
         }
 
+        if (roll.rolledSix()) {
+            // A six earns a normal extra roll even with zero movement or no legal piece.
+            session.pendingExtraRolls(session.pendingExtraRolls() + 1);
+        }
+
+        session.mutableLegalMoves().clear();
+        session.mutableLegalMoves().addAll(calculateLegalMoves(session));
+        session.phase(GameSession.Phase.SELECT_PIECE);
+        session.record(session.current().name()
+                + (surprise ? " used an immediate surprise UltraBoost and rolled " : " rolled ")
+                + roll.description(session.difficulty())
+                + (session.legalPieceIds().isEmpty()
+                    ? ". No legal move; pass to continue."
+                    : ". Select a highlighted piece."));
         return roll;
+    }
+
+    /** Return the steps applicable to the SPECIFIC piece being considered. */
+    public int stepsFor(GameSession session, Piece piece) {
+        if (session.dice() == null) {
+            throw new IllegalStateException("Dice have not been rolled");
+        }
+        DiceStrategy strategy = session.isSurpriseRollInProgress()
+                ? DiceStrategies.surpriseUltraBoost()
+                : DiceStrategies.forDifficulty(session.difficulty());
+        return strategy.stepsFor(piece, session.dice());
     }
 
     /**
@@ -258,8 +250,9 @@ public final class GameEngine {
                 continue;
             }
 
-            if (dice.movement() <= 0
-                    || piece.pathIndex() + dice.movement()
+            int movement = stepsFor(session, piece);
+            if (movement <= 0
+                    || piece.pathIndex() + movement
                         >= track.size()) {
 
                 continue;
@@ -268,7 +261,7 @@ public final class GameEngine {
             int firstBlocked = firstBlockedStep(
                 track,
                 piece.pathIndex(),
-                dice.movement(),
+                movement,
                 blocked
             );
 
@@ -318,7 +311,7 @@ public final class GameEngine {
 
         } else {
 
-            int requested = session.dice().movement();
+            int requested = stepsFor(session, piece);
 
             Set<String> blocked = opponentDoubleBlocks(
                 session,
@@ -630,6 +623,9 @@ public final class GameEngine {
             case LOSE_NEXT_TURN -> {
 
                 session.mutableSkips().add(piece.color());
+                // The pending six bonus is canceled by a lost-turn surprise.
+                session.pendingExtraRolls(0);
+                session.ultraNextRoll(false);
 
                 text = "Surprise: "
                     + session.current().name()
@@ -662,29 +658,27 @@ public final class GameEngine {
      * Completes a move after special effects are resolved.
      */
     public void completeMove(GameSession session) {
+        if (session.phase() == GameSession.Phase.FINISHED) return;
 
-        if (session.phase() == GameSession.Phase.FINISHED) {
+        // A surprise UltraBoost must run before any queued regular bonus.
+        if (session.isUltraNextRoll()) {
+            prepareNextRoll(session, "Immediate surprise UltraBoost roll!");
             return;
         }
-
-        if (session.isUltraNextRoll()
-                || (session.dice() != null
-                    && session.dice().rolledSix()
-                    && !session.current().hasFinished())) {
-
-            session.phase(GameSession.Phase.ROLL);
-            session.dice(null);
-            session.mutableLegalMoves().clear();
-
-            session.status(
-                session.current().name()
-                + " gets an extra roll!"
-            );
-
+        if (session.pendingExtraRolls() > 0 && !session.current().hasFinished()) {
+            session.pendingExtraRolls(session.pendingExtraRolls() - 1);
+            prepareNextRoll(session, session.current().name() + " gets an extra roll!");
             return;
         }
-
         advanceTurn(session);
+    }
+
+    private void prepareNextRoll(GameSession session, String message) {
+        session.phase(GameSession.Phase.ROLL);
+        session.dice(null);
+        session.surpriseRollInProgress(false);
+        session.mutableLegalMoves().clear();
+        session.status(message);
     }
 
     public void pass(GameSession session) {
@@ -711,6 +705,9 @@ public final class GameEngine {
     private void advanceTurn(GameSession session) {
 
         session.dice(null);
+        session.ultraNextRoll(false);
+        session.pendingExtraRolls(0);
+        session.surpriseRollInProgress(false);
         session.mutableLegalMoves().clear();
         session.consecutiveSixes(0);
 

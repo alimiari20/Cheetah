@@ -40,6 +40,13 @@
             </classpath>
         </java>
 
+        <java classname="model.AliUS8Tests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath>
+                <pathelement location="${build.dir}"/>
+            </classpath>
+        </java>
+
         <java classname="model.ColorSelectionTests" fork="true" failonerror="true">
             <sysproperty key="java.awt.headless" value="true"/>
             <classpath>

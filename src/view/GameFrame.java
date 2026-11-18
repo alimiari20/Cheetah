@@ -1,5 +1,6 @@
 package view;
 
+import java.util.StringJoiner;
 import javax.swing.*;
 import javax.swing.border.*;
 
@@ -242,7 +243,7 @@ return root;
         specialFace.setVisible(showSpecial);
 
         specialDieLabel.setText(
-            session.difficulty() == Difficulty.HARD
+            (roll != null && roll.ultraBoost()) || session.difficulty() == Difficulty.HARD
                 ? "ULTRABOOST DIE"
                 : "BOOST DIE"
         );
@@ -252,7 +253,8 @@ return root;
                 ? "×" + roll.multiplier()
                 : ""
         );
-        diceDetails.setText(roll==null?"READY TO ROLL":"MOVEMENT  "+roll.movement()+"  (×"+roll.multiplier()+")");
+        diceDetails.setText(roll==null ? "READY TO ROLL"
+                : "SHARED " + roll.movement() + "  |  HOME " + roll.regular());
         resultValue.setText(
         	    roll == null ? "–" : Integer.toString(roll.regular())
         	);
@@ -290,35 +292,24 @@ instruction.setText(text);
     }
     private void arenaRepaint(){screens.revalidate();screens.repaint();}
     private String availableMovesText(GameSession session) {
-        if (session.phase() != GameSession.Phase.SELECT_PIECE
-                || session.dice() == null) {
-            return "–";
-        }
-
-        boolean canExit = false;
-        boolean canMove = false;
-
+        if (session.dice() == null) return "-";
+        boolean exit = false, shared = false, home = false;
         for (String id : session.legalPieceIds()) {
             Piece piece = session.findPiece(id);
             if (piece == null) continue;
-
-            if (piece.state() == Piece.State.CASTLE) {
-                canExit = true;
-            } else {
-                canMove = true;
+            switch (piece.state()) {
+                case CASTLE -> exit = true;
+                case TRACK -> shared = true;
+                case HOME -> home = true;
+                default -> { }
             }
         }
-
-        if (canExit && canMove) {
-        	return session.dice().movement() + " OR EXIT";
-        }
-        if (canExit) {
-            return "CASTLE EXIT";
-        }
-        if (canMove) {
-            return session.dice().movement() + " squares";
-        }
-        return "NO LEGAL MOVES";
+        StringJoiner options = new StringJoiner(" / ");
+        if (shared) options.add(session.dice().movement() + " TRACK");
+        if (home) options.add(session.dice().regular() + " HOME");
+        if (exit) options.add("EXIT");
+        String result = options.toString();
+        return result.isEmpty() ? "NO LEGAL MOVES" : result;
     }
     private void updatePlayers(GameSession session){
         leftPlayers.removeAll();rightPlayers.removeAll();

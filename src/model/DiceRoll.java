@@ -1,6 +1,6 @@
 package model;
 
-/** Uses the same regular × (special - 1) rules as the original web app. */
+/** Immutable outcome of the selected DiceStrategy (normal and optional special die). */
 public record DiceRoll(int regular, int special, int multiplier, int movement, boolean ultraBoost) {
     public boolean rolledSix() { return regular == 6; }
     public String description(Difficulty difficulty) {
