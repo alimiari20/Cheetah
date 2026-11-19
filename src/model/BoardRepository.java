@@ -1,4 +1,3 @@
-
 package model;
 
 import java.io.*;
@@ -33,10 +32,8 @@ public final class BoardRepository {
             Difficulty difficulty,
             Random random) {
 
-        return new SpecialSquareGenerator().generate(
-            load(difficulty),
-            random
-        );
+        return BoardFactory.forDifficulty(difficulty, this)
+            .createBoard(random);
     }
 
     private Board parse(Difficulty difficulty) {
