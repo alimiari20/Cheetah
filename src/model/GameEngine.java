@@ -711,7 +711,7 @@ public final class GameEngine {
 
         int count = session.players().size();
 
-        for (int offset = 1; offset <= count; offset++) {
+        for (int offset = 1; offset <= count * 2; offset++) {
 
             int next =
                 (session.currentIndex() + offset) % count;
@@ -746,12 +746,8 @@ public final class GameEngine {
         
         
 
-     // All remaining players skipped their turns.
-     // Their skip penalties have already been consumed.
-     session.phase(GameSession.Phase.ROLL);
-     session.dice(null);
-     session.turn(session.turn() + 1);
-     session.status(session.current().name() + "'s turn — roll the dice.");
+
+     throw new IllegalStateException("No eligible player found");
     }
 
     private void registerFinish(
