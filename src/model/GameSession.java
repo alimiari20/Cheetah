@@ -32,7 +32,8 @@ public final class GameSession {
     	    boolean ultraNextRoll,
     	    int pendingExtraRolls,
     	    boolean surpriseRollInProgress,
-    	    Set<String> legalPieceIds
+    	    Set<String> legalPieceIds,
+    	    String status
     	) {}
 
     	private final Deque<TurnState> suspendedTurns = new ArrayDeque<>();void suspendCurrentTurn() {
@@ -45,7 +46,8 @@ public final class GameSession {
     	            ultraNextRoll,
     	            pendingExtraRolls,
     	            surpriseRollInProgress,
-    	            new LinkedHashSet<>(legalPieceIds)
+    	            new LinkedHashSet<>(legalPieceIds),
+    	            status
     	        ));
     	    }
     	void resumeSuspendedTurn() {
@@ -66,6 +68,7 @@ public final class GameSession {
 
     	    legalPieceIds.clear();
     	    legalPieceIds.addAll(saved.legalPieceIds());
+    	    status = saved.status();
     	}
     private String status = "Roll the dice to begin!";
 
@@ -122,15 +125,28 @@ public final class GameSession {
             throw new IllegalArgumentException("Invalid effect player");
         }
 
+        suspendCurrentTurn();
         effectPlayerStack.push(playerIndex);
+
+        currentPlayer = playerIndex;
+        consecutiveSixes = 0;
+        phase = Phase.ROLL;
+        dice = null;
+        ultraNextRoll = false;
+        pendingExtraRolls = 0;
+        surpriseRollInProgress = false;
+        legalPieceIds.clear();
     }
 
     void endTemporaryEffect() {
         if (effectPlayerStack.isEmpty()) {
-            throw new IllegalStateException("No temporary effect to end");
+            throw new IllegalStateException(
+                "No temporary effect to end"
+            );
         }
 
         effectPlayerStack.pop();
+        resumeSuspendedTurn();
     }
     Set<String> mutableLegalMoves() { return legalPieceIds; }
     Set<PlayerColor> mutableSkips() { return skips; }

@@ -172,8 +172,20 @@ public final class GameEngine {
             if (count >= 3) {
                 session.record(session.current().name()
                         + " rolled three consecutive regular sixes; third roll canceled.");
-                // The third six is not played; no castle exit or movement occurs.
-                advanceTurn(session);
+
+                session.pendingExtraRolls(0);
+                session.ultraNextRoll(false);
+                session.surpriseRollInProgress(false);
+
+                if (session.hasTemporaryEffectPlayer()) {
+                    session.endTemporaryEffect();
+
+                    // Finish the suspended player's already completed move.
+                    completeMove(session);
+                } else {
+                    advanceTurn(session);
+                }
+
                 return roll;
             }
         }
@@ -589,7 +601,17 @@ public final class GameEngine {
             session.findPiece(pieceId)
         );
 
-        if (piece.color() != session.current().color()) {
+        boolean isCurrentPlayer =
+                piece.color() == session.current().color();
+
+        boolean isAuthorizedEffectPlayer =
+                session.hasTemporaryEffectPlayer()
+                && session.effectPlayerIndex() != null
+                && session.players()
+                    .get(session.effectPlayerIndex())
+                    .color() == piece.color();
+
+        if (!isCurrentPlayer && !isAuthorizedEffectPlayer) {
             throw new IllegalArgumentException("Wrong player");
         }
 
@@ -667,7 +689,45 @@ public final class GameEngine {
             square
         );
     }
+    public void beginOpponentEffect(
+            GameSession session,
+            String opponentPieceId) {
 
+        Piece piece = Objects.requireNonNull(
+            session.findPiece(opponentPieceId),
+            "Opponent piece not found"
+        );
+
+        int opponentIndex = -1;
+
+        for (int i = 0; i < session.players().size(); i++) {
+            if (session.players().get(i).color() == piece.color()) {
+                opponentIndex = i;
+                break;
+            }
+        }
+
+        if (opponentIndex < 0) {
+            throw new IllegalStateException("Opponent player not found");
+        }
+
+        if (opponentIndex == session.currentIndex()) {
+            throw new IllegalArgumentException(
+                "Effect target must be an opponent"
+            );
+        }
+
+        session.beginTemporaryEffect(opponentIndex);
+    }
+    public void finishOpponentEffect(GameSession session) {
+        if (!session.hasTemporaryEffectPlayer()) {
+            throw new IllegalStateException(
+                "No temporary opponent effect to finish"
+            );
+        }
+
+        session.endTemporaryEffect();
+    }
     /**
      * Completes a move after special effects are resolved.
      */
@@ -684,6 +744,15 @@ public final class GameEngine {
             prepareNextRoll(session, session.current().name() + " gets an extra roll!");
             return;
         }
+        if (session.hasTemporaryEffectPlayer()) {
+            session.endTemporaryEffect();
+
+            // The suspended player's move was already performed.
+            // Finish that move instead of returning to SELECT_PIECE.
+            completeMove(session);
+            return;
+        }
+
         advanceTurn(session);
     }
 

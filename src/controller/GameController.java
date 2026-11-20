@@ -44,6 +44,10 @@ public final class GameController
     private boolean selectingOpponentPiece = false;
     private Set<String> eligibleOpponentPieceIds = Set.of();
     private String pendingSurprisePieceId = null;
+    
+ // Tracks which player's move completion is waiting
+ // for an opponent-selection surprise to finish.
+ 
     private void beginOpponentSelection(String currentPieceId) {
         Set<String> eligible = findEligibleOpponentPieces(currentPieceId);
 
@@ -153,6 +157,7 @@ public final class GameController
 selectingOpponentPiece = false;
 eligibleOpponentPieceIds = Set.of();
 pendingSurprisePieceId = null;
+
 view.setOpponentSelectionIds(Set.of());
 
 
@@ -484,11 +489,9 @@ view.setOpponentSelectionIds(Set.of());
 
     public void roll() {
 
-        if (resolvingDialog) {
-
-            return;
-
-        }
+    	if (resolvingDialog || selectingOpponentPiece) {
+    	    return;
+    	}
 
         tryAction(() -> {
 
@@ -608,20 +611,9 @@ private void resolveOpponentSelection(String opponentPieceId) {
     command.execute();
 
     GameEngine.MoveFeedback result = command.getResult();
-    if (result.steps() != 0 && result.squareId() != null) {
-        Board.Cell landingCell =
-            session.board().cell(result.squareId());
-
-        if (landingCell != null
-                && ("question".equals(landingCell.symbol())
-                    || "surprise".equals(landingCell.symbol()))) {
-
-            System.out.println(
-                "Opponent landed on special square: "
-                + landingCell.symbol()
-            );
-        }
-    }
+    boolean opponentMoved =
+            result.steps() != 0
+            && result.squareId() != null;
     selectingOpponentPiece = false;
     eligibleOpponentPieceIds = Set.of();
     pendingSurprisePieceId = null;
@@ -642,10 +634,45 @@ private void resolveOpponentSelection(String opponentPieceId) {
     } finally {
         resolvingDialog = false;
     }
+    if (opponentMoved) {
+        Board.Cell landing = session.board().cell(result.squareId());
 
-    engine.completeMove(session);
-    refresh();
-    postMatchCheck();
+        if (landing != null
+                && ("question".equals(landing.symbol())
+                    || "surprise".equals(landing.symbol()))) {
+            engine.beginOpponentEffect(session, opponentPieceId);
+        }
+    }
+    if (opponentMoved) {
+        Board.Cell landingCell =
+                session.board().cell(result.squareId());
+
+        if (landingCell != null) {
+            String symbol = landingCell.symbol();
+
+            if ("question".equals(symbol)
+                    || "surprise".equals(symbol)) {
+
+                // The opponent's special square must be resolved
+                // before the original player's turn continues.
+            	resolveSpecial(opponentPieceId, result.squareId());
+
+            	// Another OPPONENT_BACKWARD is waiting for a piece selection.
+            	// Do not complete any suspended turn yet.
+            	if (selectingOpponentPiece) {
+            	    refresh();
+            	    return;
+            	}
+            }
+        }
+    }
+
+ // Complete the current effect.
+ // GameEngine handles earned rolls and suspended turns.
+ engine.completeMove(session);
+
+ refresh();
+ postMatchCheck();
 }
 
 private void resolveSpecial(
@@ -730,7 +757,7 @@ private void resolveSpecial(
 
             }
 
-            if (session.hasTemporaryEffectPlayer()) {
+            if (piece.color() != session.current().color()) {
                 engine.resolveOpponentQuestion(
                     session,
                     pieceId,
