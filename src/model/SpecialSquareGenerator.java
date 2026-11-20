@@ -20,15 +20,41 @@ import java.util.Random;
  *       the prior 64-cell track is distance 1, and the original track is inside.
  *
  * Starting squares, arrows, individual home paths and castles are excluded.
+ * The number of squares per difficulty comes from BoardFactory (SRS 3.2.2.3.2-3.2.2.3.4).
  */
 public final class SpecialSquareGenerator {
     private static final String STAR = "star";
     private static final String QUESTION = "question";
     private static final String SURPRISE = "surprise";
 
-    public Board generate(Board template, Random random) {
+    /** The original 52-square track (Easy, Medium and Hard). */
+    public static final int ORIGINAL_TRACK = 2;
+    /** The additional 64-square track (Medium and Hard). */
+    public static final int MIDDLE_TRACK = 1;
+    /** The outer 72-square track (Hard only). */
+    public static final int OUTER_TRACK = 0;
+
+    /** How many squares of one kind are placed on one track. */
+    public record Placement(int track, String symbol, String specialColor, int count) {
+        public static Placement protection(int track, int count) {
+            return new Placement(track, STAR, "-", count);
+        }
+        public static Placement question(int track, String levelColor, int count) {
+            return new Placement(track, QUESTION, levelColor, count);
+        }
+        public static Placement surprise(int track, int count) {
+            return new Placement(track, SURPRISE, "purple", count);
+        }
+    }
+
+    /**
+     * Places the given special squares randomly over the board template.
+     * Which squares (and how many) is decided by the BoardFactory of each difficulty.
+     */
+    public Board generate(Board template, Random random, List<Placement> placements) {
         Objects.requireNonNull(template, "template");
         Objects.requireNonNull(random, "random");
+        Objects.requireNonNull(placements, "placements");
 
         // Work on a copy. In particular, NEVER mutate the cached preview board.
         Map<String, Board.Cell> cells = new HashMap<>();
@@ -51,25 +77,9 @@ public final class SpecialSquareGenerator {
             Collections.shuffle(candidates, random);
         }
 
-        // 4 original protections on the original (52-step) shared track.
-        place(cells, available, 2, STAR, "-", 4);
-        if (template.difficulty() != Difficulty.EASY) {
-            // 4 new protections and all six questions/two surprises
-            // on the 64-square Medium track.
-            place(cells, available, 1, STAR, "-", 4);
-            place(cells, available, 1, QUESTION, "green", 2);
-            place(cells, available, 1, QUESTION, "yellow", 2);
-            place(cells, available, 1, QUESTION, "red", 2);
-            place(cells, available, 1, SURPRISE, "purple", 2);
-        }
-        if (template.difficulty() == Difficulty.HARD) {
-            // Only the additional Hard-level squares are placed on the
-            // 72-square outer track; no Medium squares move out of their lane.
-            place(cells, available, 0, STAR, "-", 4);
-            place(cells, available, 0, QUESTION, "green", 1);
-            place(cells, available, 0, QUESTION, "yellow", 1);
-            place(cells, available, 0, QUESTION, "red", 1);
-            place(cells, available, 0, SURPRISE, "purple", 1);
+        for (Placement placement : placements) {
+            place(cells, available, placement.track(), placement.symbol(),
+                placement.specialColor(), placement.count());
         }
         return template.withCells(cells);
     }
