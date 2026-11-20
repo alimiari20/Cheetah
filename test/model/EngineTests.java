@@ -221,11 +221,22 @@ public final class EngineTests {
             engine.applySurprise(s,p.id(),SurpriseOutcome.DIRECT_FINISH,new Fixed(0));
             eq(Piece.State.FINISHED,p.state());
         });
-        checkTest("surprise opponent moves backwards 6",()->{
-            GameSession s=game();Piece red=s.findPiece("red-0");red.place(s.board(),3);
-            Piece green=s.findPiece("green-0");green.place(s.board(),10);
-            engine.applySurprise(s,red.id(),SurpriseOutcome.OPPONENT_BACKWARD,new Fixed(0));
-            eq(4,green.pathIndex());
+        checkTest("surprise opponent moves backwards 3", () -> {
+            GameSession s = game();
+
+            Piece red = s.findPiece("red-0");
+            red.place(s.board(), 3);
+
+            Piece green = s.findPiece("green-0");
+            green.place(s.board(), 10);
+
+            OpponentBackwardCommand command =
+                new OpponentBackwardCommand(engine, s, green, 6);
+
+            command.execute();
+
+            eq(7, green.pathIndex());
+            eq(-3, command.getResult().steps());
         });
         checkTest("surprise ultra boost sets extra roll flag",()->{
             GameSession s=game();Piece p=s.findPiece("red-0");p.place(s.board(),1);
@@ -283,6 +294,663 @@ public final class EngineTests {
                 eq(txt,Files.readString(exported));
             }catch(Exception ex){throw new AssertionError(ex);}
         });
+        checkTest("LOSE_NEXT_TURN keeps extra roll and skips next turn", () -> {
+            GameSession s = game();
+            Piece p = s.findPiece("red-0");
+            p.place(s.board(), 5);
+
+            // Red rolls 6 and earns an extra roll.
+            engine.roll(s, new Fixed(5));
+            eq(1, s.pendingExtraRolls());
+
+            // Surprise: Red loses the NEXT turn.
+            engine.applySurprise(
+                s,
+                p.id(),
+                SurpriseOutcome.LOSE_NEXT_TURN,
+                new Fixed(0)
+            );
+
+            // Extra roll must NOT be canceled.
+            eq(1, s.pendingExtraRolls());
+
+            // Finish current move and keep playing.
+            engine.move(s, p.id());
+            engine.completeMove(s);
+
+            eq(PlayerColor.RED, s.current().color());
+            eq(GameSession.Phase.ROLL, s.phase());
+
+            // Red uses the extra roll.
+            engine.roll(s, new Fixed(0));
+            engine.move(s, p.id());
+            engine.completeMove(s);
+
+            eq(PlayerColor.GREEN, s.current().color());
+
+            // Green finishes; Red's next turn is skipped.
+            engine.roll(s, new Fixed(0));
+            engine.pass(s);
+
+            eq(PlayerColor.GREEN, s.current().color());
+        });
+        checkTest("start square does not create double block", () -> {
+            GameSession s = game();
+            Board b = s.board();
+
+            String start = b.start(PlayerColor.GREEN);
+
+            placeAtSharedSquare(s, "green-0", start);
+            placeAtSharedSquare(s, "green-1", start);
+
+            int index = b.path(PlayerColor.RED).indexOf(start);
+            yes(index >= 2, "Start square must be reachable");
+
+            s.findPiece("red-0").place(b, index - 2);
+
+            engine.roll(s, new Fixed(3));
+
+            yes(s.legalPieceIds().contains("red-0"),
+                "Start square must not block movement");
+        });checkTest("medium movement follows board path", () -> {
+            GameSession s = engine.start(
+                    Difficulty.MEDIUM, List.of("A", "B")
+                );
+
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 10);
+
+                engine.roll(s, new Fixed(2, 1));
+
+                int steps = s.dice().movement();
+                int expected = 10 + steps;
+
+                yes(s.legalPieceIds().contains(p.id()),
+                    "Medium movement must be legal");
+
+                engine.move(s, p.id());
+
+                eq(expected, p.pathIndex());
+            });
+
+            checkTest("hard movement follows board path", () -> {
+                GameSession s = engine.start(
+                    Difficulty.HARD, List.of("A", "B")
+                );
+
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 10);
+
+                engine.roll(s, new Fixed(2, 1));
+
+                int steps = s.dice().movement();
+                int expected = 10 + steps;
+
+                yes(s.legalPieceIds().contains(p.id()),
+                    "Hard movement must be legal");
+
+                engine.move(s, p.id());
+
+                eq(expected, p.pathIndex());
+            });
+
+            checkTest("movement zero keeps piece in place", () -> {
+                GameSession s = engine.start(
+                    Difficulty.MEDIUM, List.of("A", "B")
+                );
+
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 10);
+
+                engine.roll(s, new Fixed(2, 0));
+
+                eq(0, s.dice().movement());
+
+                if (s.legalPieceIds().contains(p.id())) {
+                    engine.move(s, p.id());
+                }
+
+                eq(10, p.pathIndex());
+            });
+         // 1. Movement by one square
+            checkTest("piece moves exactly one square", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                engine.roll(s, new Fixed(0));
+                engine.move(s, p.id());
+
+                eq(6, p.pathIndex());
+            });
+
+            // 2. Movement by six squares
+            checkTest("piece moves exactly six squares", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                engine.roll(s, new Fixed(5));
+                engine.move(s, p.id());
+
+                eq(11, p.pathIndex());
+            });
+
+            // 3. A piece cannot move without a roll
+            checkTest("cannot move before rolling dice", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                boolean rejected = false;
+
+                try {
+                    engine.move(s, p.id());
+                } catch (IllegalStateException ex) {
+                    rejected = true;
+                }
+
+                yes(rejected, "Move must require a dice roll");
+                eq(5, p.pathIndex());
+            });
+
+            // 4. A player cannot move an opponent's piece
+            checkTest("cannot move opponent piece", () -> {
+                GameSession s = game();
+                Piece green = s.findPiece("green-0");
+                green.place(s.board(), 5);
+
+                engine.roll(s, new Fixed(2));
+
+                boolean rejected = false;
+
+                try {
+                    engine.move(s, green.id());
+                } catch (IllegalArgumentException | IllegalStateException ex) {
+                    rejected = true;
+                }
+
+                yes(rejected, "Opponent piece must not be movable");
+                eq(5, green.pathIndex());
+            });
+
+            // 5. Capture returns the opponent to castle
+            checkTest("captured piece returns to castle", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                Piece red = s.findPiece("red-0");
+                red.place(b, 0);
+
+                String target = b.path(PlayerColor.RED).get(2);
+                placeAtSharedSquare(s, "green-0", target);
+
+                engine.roll(s, new Fixed(1));
+                engine.move(s, red.id());
+
+                eq(Piece.State.CASTLE,
+                   s.findPiece("green-0").state());
+            });
+
+            // 6. Two opponent pieces block movement
+            checkTest("double block prevents passing", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                Piece red = s.findPiece("red-0");
+                red.place(b, 0);
+
+                String block = b.path(PlayerColor.RED).get(3);
+
+                placeAtSharedSquare(s, "green-0", block);
+                placeAtSharedSquare(s, "green-1", block);
+
+                engine.roll(s, new Fixed(3));
+
+                if (s.legalPieceIds().contains(red.id())) {
+                    engine.move(s, red.id());
+
+                    yes(red.pathIndex() < 3,
+                        "Piece must not pass double block");
+                } else {
+                    eq(0, red.pathIndex());
+                }
+            });
+
+            // 7. A double block must not be captured
+            checkTest("double block cannot be captured", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                Piece red = s.findPiece("red-0");
+                red.place(b, 0);
+
+                String block = b.path(PlayerColor.RED).get(2);
+
+                placeAtSharedSquare(s, "green-0", block);
+                placeAtSharedSquare(s, "green-1", block);
+
+                engine.roll(s, new Fixed(1));
+
+                if (s.legalPieceIds().contains(red.id())) {
+                    engine.move(s, red.id());
+                }
+
+                eq(Piece.State.TRACK,
+                   s.findPiece("green-0").state());
+
+                eq(Piece.State.TRACK,
+                   s.findPiece("green-1").state());
+            });
+
+            // 8. Safe square protects opponent
+            checkTest("safe square protects opponent piece", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                String safe = null;
+
+                for (String id : b.path(PlayerColor.RED)) {
+                    if ("star".equals(b.cell(id).symbol())) {
+                        safe = id;
+                        break;
+                    }
+                }
+
+                yes(safe != null, "Safe square missing");
+
+                int index = b.path(PlayerColor.RED).indexOf(safe);
+                yes(index > 0, "Safe square must be reachable");
+
+                Piece red = s.findPiece("red-0");
+                red.place(b, index - 1);
+
+                placeAtSharedSquare(s, "green-0", safe);
+
+                engine.roll(s, new Fixed(0));
+                engine.move(s, red.id());
+
+                eq(Piece.State.TRACK,
+                   s.findPiece("green-0").state());
+            });
+
+            // 9. Overshooting the final square is forbidden
+            checkTest("cannot overshoot home path", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                Piece p = s.findPiece("red-0");
+
+                int last = b.path(PlayerColor.RED).size() - 1;
+                p.place(b, last - 1);
+
+                engine.roll(s, new Fixed(2));
+
+                yes(!s.legalPieceIds().contains(p.id()),
+                    "Overshooting home must be illegal");
+            });
+
+            // 10. Movement cannot happen twice on the same roll
+            checkTest("cannot move twice with same roll", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                engine.roll(s, new Fixed(0));
+                engine.move(s, p.id());
+
+                boolean rejected = false;
+
+                try {
+                    engine.move(s, p.id());
+                } catch (IllegalArgumentException | IllegalStateException ex) {
+                    rejected = true;
+                }
+
+                yes(rejected, "Second move must be rejected");
+                eq(6, p.pathIndex());
+            });
+
+            // 11. A normal roll of six earns one extra roll
+            checkTest("six earns one extra roll", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                engine.roll(s, new Fixed(5));
+
+                eq(1, s.pendingExtraRolls());
+
+                engine.move(s, p.id());
+                engine.completeMove(s);
+
+                eq(PlayerColor.RED, s.current().color());
+                eq(GameSession.Phase.ROLL, s.phase());
+            });
+
+            // 12. Third consecutive six ends the turn
+            checkTest("third consecutive six cancels turn", () -> {
+                GameSession s = game();
+
+                for (int i = 0; i < 2; i++) {
+                    engine.roll(s, new Fixed(5));
+                    engine.move(s, "red-" + i);
+                    engine.completeMove(s);
+                }
+
+                engine.roll(s, new Fixed(5));
+
+                eq(PlayerColor.GREEN, s.current().color());
+                eq(0, s.pendingExtraRolls());
+            });
+
+            // 13. Normal roll after a six resets the counter
+            checkTest("non six resets consecutive six counter", () -> {
+                GameSession s = game();
+
+                engine.roll(s, new Fixed(5));
+                engine.move(s, "red-0");
+                engine.completeMove(s);
+
+                eq(1, s.consecutiveSixes());
+
+                engine.roll(s, new Fixed(2));
+
+                eq(0, s.consecutiveSixes());
+            });
+
+            // 14. UltraBoost surprise uses special dice
+            checkTest("ultraboost surprise uses special dice", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                engine.applySurprise(
+                    s, p.id(),
+                    SurpriseOutcome.ULTRABOOST,
+                    new Fixed(0)
+                );
+
+                yes(s.isUltraNextRoll(),
+                    "UltraBoost must be scheduled");
+
+                engine.roll(s, new Fixed(1, 5));
+
+                yes(s.dice().ultraBoost(),
+                    "UltraBoost dice must be used");
+
+                eq(10, s.dice().movement());
+            });
+
+            // 15. Six during surprise UltraBoost earns an extra roll
+            checkTest("ultraboost six earns extra roll", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                engine.applySurprise(
+                    s, p.id(),
+                    SurpriseOutcome.ULTRABOOST,
+                    new Fixed(0)
+                );
+
+                engine.roll(s, new Fixed(5, 0));
+
+                eq(6, s.dice().regular());
+
+                yes(s.pendingExtraRolls() > 0,
+                    "Six during UltraBoost must earn extra roll");
+            });
+
+            // 16. Surprise UltraBoost does not count toward three sixes
+            checkTest("surprise ultraboost six does not increase normal six counter", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                engine.applySurprise(
+                    s, p.id(),
+                    SurpriseOutcome.ULTRABOOST,
+                    new Fixed(0)
+                );
+
+                engine.roll(s, new Fixed(5, 0));
+
+                eq(0, s.consecutiveSixes());
+            });
+         // 1. Rolling six allows choosing a track piece instead of castle exit
+            checkTest("six allows choosing existing track piece", () -> {
+                GameSession s = game();
+                Piece p = s.findPiece("red-0");
+                p.place(s.board(), 5);
+
+                engine.roll(s, new Fixed(5));
+
+                yes(s.legalPieceIds().contains(p.id()),
+                    "Existing track piece must be selectable");
+                yes(s.legalPieceIds().contains("red-1"),
+                    "Castle piece must also be selectable");
+
+                engine.move(s, p.id());
+                eq(11, p.pathIndex());
+            });
+
+            // 2. Four pieces may share their own start square
+            checkTest("four same color pieces can share start square", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                for (int i = 0; i < 4; i++) {
+                    s.findPiece("red-" + i).place(b, 0);
+                }
+
+                for (int i = 0; i < 4; i++) {
+                    eq(0, s.findPiece("red-" + i).pathIndex());
+                    eq(Piece.State.TRACK, s.findPiece("red-" + i).state());
+                }
+            });
+
+            // 3. A finished piece cannot move again
+            checkTest("finished piece cannot move again", () -> {
+                GameSession s = game();
+                Board b = s.board();
+                Piece p = s.findPiece("red-0");
+
+                p.place(b, b.path(PlayerColor.RED).size() - 1);
+
+                engine.roll(s, new Fixed(2));
+
+                yes(!s.legalPieceIds().contains(p.id()),
+                    "Finished piece must not be selectable");
+            });
+
+            // 4. Own double block does not block own movement
+            checkTest("own double block does not stop own piece", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                s.findPiece("red-0").place(b, 0);
+                s.findPiece("red-1").place(b, 3);
+                s.findPiece("red-2").place(b, 3);
+
+                engine.roll(s, new Fixed(3));
+
+                yes(s.legalPieceIds().contains("red-0"),
+                    "Own block must not stop movement");
+
+                engine.move(s, "red-0");
+                eq(4, s.findPiece("red-0").pathIndex());
+            });
+
+            // 5. Moving a piece can break its own double block
+            checkTest("double block can be broken by moving piece", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                Piece first = s.findPiece("red-0");
+                Piece second = s.findPiece("red-1");
+
+                first.place(b, 5);
+                second.place(b, 5);
+
+                engine.roll(s, new Fixed(0));
+
+                yes(s.legalPieceIds().contains(first.id()),
+                    "Block piece must remain movable");
+
+                engine.move(s, first.id());
+
+                eq(6, first.pathIndex());
+                eq(5, second.pathIndex());
+            });
+
+            // 6. Opponent double block on start prevents castle exit
+            checkTest("opponent block on start prevents castle exit", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                String redStart = b.start(PlayerColor.RED);
+
+                placeAtSharedSquare(s, "green-0", redStart);
+                placeAtSharedSquare(s, "green-1", redStart);
+
+                engine.roll(s, new Fixed(5));
+
+                yes(!s.legalPieceIds().contains("red-0"),
+                    "Opponent block must prevent castle exit");
+            });
+
+            // 7. Direct finish surprise bypasses double block
+            checkTest("direct finish ignores opponent double block", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                Piece red = s.findPiece("red-0");
+                red.place(b, 5);
+
+                String block = b.path(PlayerColor.RED).get(8);
+
+                placeAtSharedSquare(s, "green-0", block);
+                placeAtSharedSquare(s, "green-1", block);
+
+                engine.applySurprise(
+                    s, red.id(),
+                    SurpriseOutcome.DIRECT_FINISH,
+                    new Fixed(0)
+                );
+
+                eq(Piece.State.FINISHED, red.state());
+            });
+
+            // 8. Start square protects pieces of different colors
+            checkTest("start square protects opposing piece", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                String greenStart = b.start(PlayerColor.GREEN);
+                int index = b.path(PlayerColor.RED).indexOf(greenStart);
+
+                yes(index > 0, "Green start must be reachable");
+
+                s.findPiece("red-0").place(b, index - 1);
+                placeAtSharedSquare(s, "green-0", greenStart);
+
+                engine.roll(s, new Fixed(0));
+                engine.move(s, "red-0");
+
+                eq(Piece.State.TRACK,
+                   s.findPiece("green-0").state());
+            });
+
+            // 9. A protected square may contain both colors
+            checkTest("safe square allows different colors together", () -> {
+                GameSession s = game();
+                Board b = s.board();
+
+                String safe = null;
+
+                for (String id : b.path(PlayerColor.RED)) {
+                    if ("star".equals(b.cell(id).symbol())) {
+                        safe = id;
+                        break;
+                    }
+                }
+
+                yes(safe != null, "Safe square missing");
+
+                int index = b.path(PlayerColor.RED).indexOf(safe);
+                yes(index > 0, "Safe square must be reachable");
+
+                Piece red = s.findPiece("red-0");
+                red.place(b, index - 1);
+                placeAtSharedSquare(s, "green-0", safe);
+
+                engine.roll(s, new Fixed(0));
+                engine.move(s, red.id());
+
+                eq(safe, b.path(PlayerColor.RED).get(red.pathIndex()));
+                eq(Piece.State.TRACK, s.findPiece("green-0").state());
+            });
+
+            // 10. Medium home path uses regular die only
+            checkTest("medium home path ignores boost multiplier", () -> {
+                GameSession s = engine.start(
+                    Difficulty.MEDIUM, List.of("A", "B")
+                );
+
+                Board b = s.board();
+                Piece p = s.findPiece("red-0");
+
+                int last = b.path(PlayerColor.RED).size() - 1;
+                p.place(b, last - 3);
+
+                engine.roll(s, new Fixed(1, 2));
+
+                yes(s.legalPieceIds().contains(p.id()),
+                    "Home piece must be movable");
+
+                engine.move(s, p.id());
+
+                eq(last - 1, p.pathIndex());
+            });
+
+            // 11. Hard home path uses regular die only
+            checkTest("hard home path ignores ultraboost multiplier", () -> {
+                GameSession s = engine.start(
+                    Difficulty.HARD, List.of("A", "B")
+                );
+
+                Board b = s.board();
+                Piece p = s.findPiece("red-0");
+
+                int last = b.path(PlayerColor.RED).size() - 1;
+                p.place(b, last - 3);
+
+                engine.roll(s, new Fixed(1, 5));
+
+                yes(s.legalPieceIds().contains(p.id()),
+                    "Home piece must be movable");
+
+                engine.move(s, p.id());
+
+                eq(last - 1, p.pathIndex());
+            });
+
+            // 12. A piece can advance within home without finishing
+            checkTest("piece advances within home without finishing", () -> {
+                GameSession s = game();
+                Board b = s.board();
+                Piece p = s.findPiece("red-0");
+
+                int last = b.path(PlayerColor.RED).size() - 1;
+                p.place(b, last - 4);
+
+                engine.roll(s, new Fixed(1));
+                engine.move(s, p.id());
+
+                eq(last - 2, p.pathIndex());
+                eq(Piece.State.HOME, p.state());
+            });
         System.out.println("\n"+passed+" PASSED, "+failed+" FAILED");
         System.exit(failed>0?1:0); // BoardPanel starts a Swing timer, so exit explicitly
     }
