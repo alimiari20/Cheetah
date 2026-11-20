@@ -5,7 +5,7 @@ import javax.swing.*;
 import javax.swing.border.*;
 
 import model.*;
-
+import java.util.Set;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
@@ -412,5 +412,8 @@ instruction.setText(text);
                  for(int i:index[Math.min(6,value)-1])d.fillOval(pts[i][0]-3,pts[i][1]-4,8,8);}
             d.dispose();
         }
+    }
+    public void setOpponentSelectionIds(Set<String> ids) {
+        boardPanel.setOpponentSelectionIds(ids);
     }
 }

@@ -22,6 +22,54 @@ public final class GameSession {
     // Earned normal extra rolls wait while immediate surprise rolls resolve.
     private int pendingExtraRolls;
     private boolean surpriseRollInProgress;
+    private final Deque<Integer> effectPlayerStack = new ArrayDeque<>();
+    private record TurnState(
+    	    int currentPlayer,
+    	    int turn,
+    	    int consecutiveSixes,
+    	    Phase phase,
+    	    DiceRoll dice,
+    	    boolean ultraNextRoll,
+    	    int pendingExtraRolls,
+    	    boolean surpriseRollInProgress,
+    	    Set<String> legalPieceIds,
+    	    String status
+    	) {}
+
+    	private final Deque<TurnState> suspendedTurns = new ArrayDeque<>();void suspendCurrentTurn() {
+    	    suspendedTurns.push(new TurnState(
+    	            currentPlayer,
+    	            turn,
+    	            consecutiveSixes,
+    	            phase,
+    	            dice,
+    	            ultraNextRoll,
+    	            pendingExtraRolls,
+    	            surpriseRollInProgress,
+    	            new LinkedHashSet<>(legalPieceIds),
+    	            status
+    	        ));
+    	    }
+    	void resumeSuspendedTurn() {
+    	    if (suspendedTurns.isEmpty()) {
+    	        throw new IllegalStateException("No suspended turn to resume");
+    	    }
+
+    	    TurnState saved = suspendedTurns.pop();
+
+    	    currentPlayer = saved.currentPlayer();
+    	    turn = saved.turn();
+    	    consecutiveSixes = saved.consecutiveSixes();
+    	    phase = saved.phase();
+    	    dice = saved.dice();
+    	    ultraNextRoll = saved.ultraNextRoll();
+    	    pendingExtraRolls = saved.pendingExtraRolls();
+    	    surpriseRollInProgress = saved.surpriseRollInProgress();
+
+    	    legalPieceIds.clear();
+    	    legalPieceIds.addAll(saved.legalPieceIds());
+    	    status = saved.status();
+    	}
     private String status = "Roll the dice to begin!";
 
     GameSession(Board board, List<Player> players) {
@@ -43,6 +91,15 @@ public final class GameSession {
     public int pendingExtraRolls() { return pendingExtraRolls; }
     public boolean isSurpriseRollInProgress() { return surpriseRollInProgress; }
     public String status() { return status; }
+    
+
+    public boolean hasTemporaryEffectPlayer() {
+        return !effectPlayerStack.isEmpty();
+    }
+
+    public Integer effectPlayerIndex() {
+        return effectPlayerStack.peek();
+    }
     public List<String> events() { return Collections.unmodifiableList(events); }
     public Set<String> legalPieceIds() { return Collections.unmodifiableSet(legalPieceIds); }
     public List<PlayerColor> ranking() { return Collections.unmodifiableList(ranking); }
@@ -59,7 +116,38 @@ public final class GameSession {
         if (value < 0) throw new IllegalArgumentException("Negative extra rolls");
         pendingExtraRolls = value;
     }
-    void surpriseRollInProgress(boolean value) { surpriseRollInProgress = value; }
+    void surpriseRollInProgress(boolean value) {
+        surpriseRollInProgress = value;
+    }
+   
+    void beginTemporaryEffect(int playerIndex) {
+        if (playerIndex < 0 || playerIndex >= players.size()) {
+            throw new IllegalArgumentException("Invalid effect player");
+        }
+
+        suspendCurrentTurn();
+        effectPlayerStack.push(playerIndex);
+
+        currentPlayer = playerIndex;
+        consecutiveSixes = 0;
+        phase = Phase.ROLL;
+        dice = null;
+        ultraNextRoll = false;
+        pendingExtraRolls = 0;
+        surpriseRollInProgress = false;
+        legalPieceIds.clear();
+    }
+
+    void endTemporaryEffect() {
+        if (effectPlayerStack.isEmpty()) {
+            throw new IllegalStateException(
+                "No temporary effect to end"
+            );
+        }
+
+        effectPlayerStack.pop();
+        resumeSuspendedTurn();
+    }
     Set<String> mutableLegalMoves() { return legalPieceIds; }
     Set<PlayerColor> mutableSkips() { return skips; }
     List<PlayerColor> mutableRanking() { return ranking; }

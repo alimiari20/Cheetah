@@ -172,8 +172,20 @@ public final class GameEngine {
             if (count >= 3) {
                 session.record(session.current().name()
                         + " rolled three consecutive regular sixes; third roll canceled.");
-                // The third six is not played; no castle exit or movement occurs.
-                advanceTurn(session);
+
+                session.pendingExtraRolls(0);
+                session.ultraNextRoll(false);
+                session.surpriseRollInProgress(false);
+
+                if (session.hasTemporaryEffectPlayer()) {
+                    session.endTemporaryEffect();
+
+                    // Finish the suspended player's already completed move.
+                    completeMove(session);
+                } else {
+                    advanceTurn(session);
+                }
+
                 return roll;
             }
         }
@@ -491,15 +503,29 @@ public final class GameEngine {
             GameSession session,
             String pieceId,
             Question question,
-            boolean correct) {
+            boolean correct)  {
+    	
+    	
+    	
+    	
 
         Piece piece = Objects.requireNonNull(
             session.findPiece(pieceId)
         );
 
-        if (piece.color() != session.current().color()) {
-            throw new IllegalArgumentException("Wrong player");
-        }
+        boolean isCurrentPlayer =
+        	    piece.color() == session.current().color();
+
+        	boolean isAuthorizedEffectPlayer =
+        	    session.hasTemporaryEffectPlayer()
+        	    && session.effectPlayerIndex() != null
+        	    && session.players()
+        	        .get(session.effectPlayerIndex())
+        	        .color() == piece.color();
+
+        	if (!isCurrentPlayer && !isAuthorizedEffectPlayer) {
+        	    throw new IllegalArgumentException("Wrong player");
+        	}
 
         int reward =
             question.movementReward() * (correct ? 1 : -1);
@@ -511,8 +537,8 @@ public final class GameEngine {
         );
 
         session.record(
-            session.current().name()
-            + " answered "
+        	    session.findPlayer(piece.color()).name()
+        	    + " answered "
             + (correct ? "correctly" : "incorrectly")
             + " ("
             + question.difficulty().name().toLowerCase()
@@ -521,6 +547,49 @@ public final class GameEngine {
             + "."
         );
     }
+
+
+
+    public MoveFeedback resolveOpponentQuestion(
+        GameSession session,
+        String pieceId,
+        Question question,
+        boolean correct) {
+
+    Piece piece = Objects.requireNonNull(
+        session.findPiece(pieceId)
+    );
+
+    if (!session.hasTemporaryEffectPlayer()
+            || session.effectPlayerIndex() == null
+            || session.players()
+                .get(session.effectPlayerIndex())
+                .color() != piece.color()) {
+
+        throw new IllegalStateException(
+            "No authorized opponent effect for this piece"
+        );
+    }
+
+    int reward =
+        question.movementReward() * (correct ? 1 : -1);
+
+    MoveFeedback move = shiftPiece(
+        session, piece, reward
+    );
+
+    session.record(
+        session.findPlayer(piece.color()).name()
+        + " answered "
+        + (correct ? "correctly" : "incorrectly")
+        + " ("
+        + question.difficulty().name().toLowerCase()
+        + "). "
+        + move.message()
+        + "."
+    );
+    return move;
+}
 
     public SurpriseFeedback applySurprise(
             GameSession session,
@@ -532,7 +601,17 @@ public final class GameEngine {
             session.findPiece(pieceId)
         );
 
-        if (piece.color() != session.current().color()) {
+        boolean isCurrentPlayer =
+                piece.color() == session.current().color();
+
+        boolean isAuthorizedEffectPlayer =
+                session.hasTemporaryEffectPlayer()
+                && session.effectPlayerIndex() != null
+                && session.players()
+                    .get(session.effectPlayerIndex())
+                    .color() == piece.color();
+
+        if (!isCurrentPlayer && !isAuthorizedEffectPlayer) {
             throw new IllegalArgumentException("Wrong player");
         }
 
@@ -541,66 +620,22 @@ public final class GameEngine {
 
         switch (outcome) {
 
-            case DIRECT_FINISH -> {
+        case DIRECT_FINISH -> {
+            new DirectFinishCommand(this, session, piece).execute();
 
-                piece.place(
-                    session.board(),
-                    session.board().path(piece.color()).size() - 1
-                );
+            text = "Surprise: Direct finish! Piece "
+                + (piece.number() + 1)
+                + " reached HOME.";
+        }
 
-                registerFinish(session, session.current());
-
-                text = "Surprise: Direct finish! Piece "
-                    + (piece.number() + 1)
-                    + " reached HOME.";
-            }
-
-            case OPPONENT_BACKWARD -> {
-
-                List<Piece> available = new ArrayList<>();
-
-                for (Player p : session.players()) {
-
-                    if (p.color() != piece.color()) {
-
-                        for (Piece other : p.pieces()) {
-
-                            if (other.state() == Piece.State.TRACK
-                                    || other.state() == Piece.State.HOME) {
-
-                                available.add(other);
-                            }
-                        }
-                    }
-                }
-
-                if (available.isEmpty()) {
-
-                    text = "Surprise: No opponent piece "
-                        + "to move backward.";
-
-                } else {
-
-                    Piece other = available.get(
-                        random.nextInt(available.size())
-                    );
-
-                    int moved =
-                        shiftPiece(session, other, -6).steps();
-
-                    text = "Surprise: "
-                        + other.color().label()
-                        + " piece "
-                        + (other.number() + 1)
-                        + " moved "
-                        + Math.abs(moved)
-                        + " squares backward.";
-                }
-            }
+        case OPPONENT_BACKWARD -> {
+            throw new IllegalStateException(
+                "OPPONENT_BACKWARD requires player selection in GameController"
+            );
+        }
 
             case RETURN_TO_CASTLE -> {
-
-                piece.returnCastle();
+                new ReturnToCastleCommand(piece).execute();
 
                 text = "Surprise: Piece "
                     + (piece.number() + 1)
@@ -608,9 +643,12 @@ public final class GameEngine {
             }
 
             case BACKWARD_THREE -> {
+                BackwardThreeCommand command =
+                    new BackwardThreeCommand(this, session, piece);
 
-                MoveFeedback adjusted =
-                    shiftPiece(session, piece, -3);
+                command.execute();
+
+                MoveFeedback adjusted = command.getResult();
 
                 square = adjusted.steps() == 0
                     ? null : adjusted.squareId();
@@ -622,19 +660,17 @@ public final class GameEngine {
 
             case LOSE_NEXT_TURN -> {
 
-                session.mutableSkips().add(piece.color());
-                // The pending six bonus is canceled by a lost-turn surprise.
-                session.pendingExtraRolls(0);
-                session.ultraNextRoll(false);
+            	new LoseNextTurnCommand(session, piece.color()).execute();
+               
 
-                text = "Surprise: "
-                    + session.current().name()
-                    + " loses their next turn!";
+            	text = "Surprise: "
+            	        + session.findPlayer(piece.color()).name()
+            	        + " loses their next turn!";
             }
 
             case ULTRABOOST -> {
 
-                session.ultraNextRoll(true);
+            	new UltraBoostCommand(session).execute();
 
                 text = "Surprise: Immediate UltraBoost "
                     + "extra roll granted!";
@@ -653,7 +689,45 @@ public final class GameEngine {
             square
         );
     }
+    public void beginOpponentEffect(
+            GameSession session,
+            String opponentPieceId) {
 
+        Piece piece = Objects.requireNonNull(
+            session.findPiece(opponentPieceId),
+            "Opponent piece not found"
+        );
+
+        int opponentIndex = -1;
+
+        for (int i = 0; i < session.players().size(); i++) {
+            if (session.players().get(i).color() == piece.color()) {
+                opponentIndex = i;
+                break;
+            }
+        }
+
+        if (opponentIndex < 0) {
+            throw new IllegalStateException("Opponent player not found");
+        }
+
+        if (opponentIndex == session.currentIndex()) {
+            throw new IllegalArgumentException(
+                "Effect target must be an opponent"
+            );
+        }
+
+        session.beginTemporaryEffect(opponentIndex);
+    }
+    public void finishOpponentEffect(GameSession session) {
+        if (!session.hasTemporaryEffectPlayer()) {
+            throw new IllegalStateException(
+                "No temporary opponent effect to finish"
+            );
+        }
+
+        session.endTemporaryEffect();
+    }
     /**
      * Completes a move after special effects are resolved.
      */
@@ -670,6 +744,15 @@ public final class GameEngine {
             prepareNextRoll(session, session.current().name() + " gets an extra roll!");
             return;
         }
+        if (session.hasTemporaryEffectPlayer()) {
+            session.endTemporaryEffect();
+
+            // The suspended player's move was already performed.
+            // Finish that move instead of returning to SELECT_PIECE.
+            completeMove(session);
+            return;
+        }
+
         advanceTurn(session);
     }
 
@@ -745,29 +828,20 @@ public final class GameEngine {
             return;
         }
 
-        for (int offset = 1; offset <= count; offset++) {
+        
+        
 
-            int next =
-                (session.currentIndex() + offset) % count;
 
-            if (!session.players().get(next).hasFinished()) {
-
-                session.currentPlayer(next);
-                session.turn(session.turn() + 1);
-                session.phase(GameSession.Phase.ROLL);
-
-                session.status(
-                    session.current().name()
-                    + "'s turn — roll the dice."
-                );
-
-                return;
-            }
-        }
-
-        session.phase(GameSession.Phase.FINISHED);
+     throw new IllegalStateException("No eligible player found");
     }
+    void finishPieceDirectly(GameSession session, Piece piece) {
+        piece.place(
+            session.board(),
+            session.board().path(piece.color()).size() - 1
+        );
 
+        registerFinish(session, session.findPlayer(piece.color()));
+    }
     private void registerFinish(
             GameSession session,
             Player player) {

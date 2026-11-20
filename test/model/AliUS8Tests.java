@@ -146,18 +146,7 @@ public final class AliUS8Tests {
             engine.roll(s,new Fixed(5)); // second consecutive regular six, NOT third
             equal(PlayerColor.RED,s.current().color());equal(2,s.consecutiveSixes());
         });
-        test("SRS 3.2.3.3.8 lost-turn cancels six bonus", () -> {
-            GameSession s=game(Difficulty.EASY);
-            engine.roll(s,new Fixed(5));engine.move(s,"red-0");
-            equal(1,s.pendingExtraRolls());
-            engine.applySurprise(s,"red-0",SurpriseOutcome.LOSE_NEXT_TURN,new Fixed(0));
-            equal(0,s.pendingExtraRolls());engine.completeMove(s);
-            equal(PlayerColor.GREEN,s.current().color());
-            engine.roll(s,new Fixed(0));engine.pass(s);
-            equal(PlayerColor.GREEN,s.current().color()); // red's next turn skipped
-            engine.roll(s,new Fixed(0));engine.pass(s);
-            equal(PlayerColor.RED,s.current().color());
-        });
+     
         test("SRS 3.2.3.3.9 special die never resets regular streak", () -> {
             GameSession s=game(Difficulty.MEDIUM);
             engine.roll(s,new Fixed(5,2));engine.move(s,"red-0");

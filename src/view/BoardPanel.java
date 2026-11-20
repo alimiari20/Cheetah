@@ -15,10 +15,12 @@ import java.util.function.Consumer;
 public final class BoardPanel extends JPanel {
     private GameSession session;
     private float glowPhase = 0f;
-
+    private Set<String> opponentSelectionIds = Set.of();
     private final javax.swing.Timer glowTimer =
         new javax.swing.Timer(40, e -> {
-            if (session != null && !session.legalPieceIds().isEmpty()) {
+        	if (session != null &&
+        	        (!session.legalPieceIds().isEmpty()
+        	        || !opponentSelectionIds.isEmpty())) {
                 glowPhase += 0.12f;
                 repaint();
             }
@@ -34,16 +36,31 @@ public final class BoardPanel extends JPanel {
         setPreferredSize(new Dimension(710,710));
         glowTimer.start();
         MouseAdapter mouse = new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) {
-                for (int i=hitTargets.size()-1;i>=0;i--) if(hitTargets.get(i).contains(e.getX(),e.getY())) {
-                    onSelect.accept(hitTargets.get(i).id());
-                    return;
-                }
+        	@Override
+        	public void mouseClicked(MouseEvent e) {
+        	    for (int i = hitTargets.size() - 1; i >= 0; i--) {
+        	        if (hitTargets.get(i).contains(e.getX(), e.getY())) {
+
+        	            String selectedId = hitTargets.get(i).id();
+
+        	            if (!opponentSelectionIds.isEmpty()
+        	                    && !opponentSelectionIds.contains(selectedId)) {
+        	                return;
+        	            }
+
+        	            onSelect.accept(selectedId);
+        	            return;
+        	        }
+        	    }
+        	
             }
             @Override public void mouseMoved(MouseEvent e) {
                 boolean legal=false;
                 for (Hit h : hitTargets) if (h.contains(e.getX(),e.getY()) &&
-                        session != null && session.legalPieceIds().contains(h.id())) { legal=true; break; }
+                		session != null &&
+                		(opponentSelectionIds.isEmpty()
+                		    ? session.legalPieceIds().contains(h.id())
+                		    : opponentSelectionIds.contains(h.id()))) { legal=true; break; }
                 setCursor(Cursor.getPredefinedCursor(legal ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
             }
         };
@@ -52,7 +69,10 @@ public final class BoardPanel extends JPanel {
     }
     public void setOnSelect(Consumer<String> callback) { onSelect=Objects.requireNonNull(callback); }
     public void setSession(GameSession value) { session=value;repaint(); }
-
+    public void setOpponentSelectionIds(Set<String> ids) {
+        opponentSelectionIds = Set.copyOf(ids);
+        repaint();
+    }
     @Override protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D d=(Graphics2D)g.create();
@@ -342,7 +362,10 @@ private void drawCastles(Graphics2D d, Board board,
                     cx+=((i%2==0)?-.22:.22)*s;
                     cy+=((i/2%2==0)?-.22:.22)*s;
                 }
-                paintPiece(d,piece,cx,cy,diameter,session.legalPieceIds().contains(piece.id()));
+                paintPiece(d, piece, cx, cy, diameter,
+                        opponentSelectionIds.isEmpty()
+                                && session.legalPieceIds().contains(piece.id()),
+                        opponentSelectionIds.contains(piece.id()));
                 hitTargets.add(new Hit(piece.id(),cx,cy,Math.max(diameter*.53,9)));
             }
         }
@@ -356,21 +379,31 @@ private void drawCastles(Graphics2D d, Board board,
                 double angle=Math.PI*2*(colorNumber+.25)/4;
                 double cx=centerX+Math.cos(angle)*s*(.55+count*.14);
                 double cy=centerY+Math.sin(angle)*s*(.55+count*.14);
-                paintPiece(d,piece,cx,cy,s*.25,false);
+                paintPiece(d, piece, cx, cy, s * .25, false, false);
                 count++;
             }
             colorNumber++;
         }
     }
-    private void paintPiece(Graphics2D d,Piece p,double cx,double cy,double diameter,boolean legal) {
+    private void paintPiece(Graphics2D d, Piece p,
+            double cx, double cy, double diameter,
+            boolean legal, boolean opponentTarget) {
         double r=diameter/2;
-        if (legal) {
+        if (legal || opponentTarget) {
             float pulse = (float) ((Math.sin(glowPhase) + 1.0) / 2.0);
+            Color glowColor = opponentTarget
+                    ? new Color(255, 45, 65)
+                    : new Color(70, 255, 180);
 
             double glowSize = 4 + pulse * 5;
 
             // Soft outer glow
-            d.setColor(new Color(20, 255, 170, (int)(45 + pulse * 65)));
+            d.setColor(new Color(
+                    glowColor.getRed(),
+                    glowColor.getGreen(),
+                    glowColor.getBlue(),
+                    (int)(45 + pulse * 65)
+            ));
             d.fill(new Ellipse2D.Double(
                 cx - r - glowSize,
                 cy - r - glowSize,
@@ -379,7 +412,12 @@ private void drawCastles(Graphics2D d, Board board,
             ));
 
             // Bright pulsing ring
-            d.setColor(new Color(70, 255, 180, (int)(150 + pulse * 105)));
+            d.setColor(new Color(
+                    glowColor.getRed(),
+                    glowColor.getGreen(),
+                    glowColor.getBlue(),
+                    (int)(150 + pulse * 105)
+            ));
             d.setStroke(new BasicStroke(
                 (float)(2.0 + pulse * 2.0)
             ));
