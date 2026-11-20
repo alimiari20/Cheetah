@@ -730,17 +730,21 @@ private void resolveSpecial(
 
             }
 
-            engine.resolveQuestion(
-
-                session,
-
-                pieceId,
-
-                question,
-
-                correct
-
-            );
+            if (session.hasTemporaryEffectPlayer()) {
+                engine.resolveOpponentQuestion(
+                    session,
+                    pieceId,
+                    question,
+                    correct
+                );
+            } else {
+                engine.resolveQuestion(
+                    session,
+                    pieceId,
+                    question,
+                    correct
+                );
+            }
 
             refresh();
 

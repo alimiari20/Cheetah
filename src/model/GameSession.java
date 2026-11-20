@@ -22,11 +22,51 @@ public final class GameSession {
     // Earned normal extra rolls wait while immediate surprise rolls resolve.
     private int pendingExtraRolls;
     private boolean surpriseRollInProgress;
- // The player whose normal turn was interrupted.
-    private Integer suspendedPlayerIndex;
+    private final Deque<Integer> effectPlayerStack = new ArrayDeque<>();
+    private record TurnState(
+    	    int currentPlayer,
+    	    int turn,
+    	    int consecutiveSixes,
+    	    Phase phase,
+    	    DiceRoll dice,
+    	    boolean ultraNextRoll,
+    	    int pendingExtraRolls,
+    	    boolean surpriseRollInProgress,
+    	    Set<String> legalPieceIds
+    	) {}
 
-    // The player temporarily resolving an opponent-triggered effect.
-    private Integer effectPlayerIndex;
+    	private final Deque<TurnState> suspendedTurns = new ArrayDeque<>();void suspendCurrentTurn() {
+    	    suspendedTurns.push(new TurnState(
+    	            currentPlayer,
+    	            turn,
+    	            consecutiveSixes,
+    	            phase,
+    	            dice,
+    	            ultraNextRoll,
+    	            pendingExtraRolls,
+    	            surpriseRollInProgress,
+    	            new LinkedHashSet<>(legalPieceIds)
+    	        ));
+    	    }
+    	void resumeSuspendedTurn() {
+    	    if (suspendedTurns.isEmpty()) {
+    	        throw new IllegalStateException("No suspended turn to resume");
+    	    }
+
+    	    TurnState saved = suspendedTurns.pop();
+
+    	    currentPlayer = saved.currentPlayer();
+    	    turn = saved.turn();
+    	    consecutiveSixes = saved.consecutiveSixes();
+    	    phase = saved.phase();
+    	    dice = saved.dice();
+    	    ultraNextRoll = saved.ultraNextRoll();
+    	    pendingExtraRolls = saved.pendingExtraRolls();
+    	    surpriseRollInProgress = saved.surpriseRollInProgress();
+
+    	    legalPieceIds.clear();
+    	    legalPieceIds.addAll(saved.legalPieceIds());
+    	}
     private String status = "Roll the dice to begin!";
 
     GameSession(Board board, List<Player> players) {
@@ -48,16 +88,14 @@ public final class GameSession {
     public int pendingExtraRolls() { return pendingExtraRolls; }
     public boolean isSurpriseRollInProgress() { return surpriseRollInProgress; }
     public String status() { return status; }
-    public boolean hasTemporaryEffectPlayer() {
-        return effectPlayerIndex != null;
-    }
+    
 
-    public Integer suspendedPlayerIndex() {
-        return suspendedPlayerIndex;
+    public boolean hasTemporaryEffectPlayer() {
+        return !effectPlayerStack.isEmpty();
     }
 
     public Integer effectPlayerIndex() {
-        return effectPlayerIndex;
+        return effectPlayerStack.peek();
     }
     public List<String> events() { return Collections.unmodifiableList(events); }
     public Set<String> legalPieceIds() { return Collections.unmodifiableSet(legalPieceIds); }
@@ -78,26 +116,21 @@ public final class GameSession {
     void surpriseRollInProgress(boolean value) {
         surpriseRollInProgress = value;
     }
+   
     void beginTemporaryEffect(int playerIndex) {
-        if (effectPlayerIndex != null) {
-            throw new IllegalStateException(
-                "A temporary effect is already active"
-            );
-        }
-
         if (playerIndex < 0 || playerIndex >= players.size()) {
-            throw new IllegalArgumentException(
-                "Invalid effect player"
-            );
+            throw new IllegalArgumentException("Invalid effect player");
         }
 
-        suspendedPlayerIndex = currentPlayer;
-        effectPlayerIndex = playerIndex;
+        effectPlayerStack.push(playerIndex);
     }
 
     void endTemporaryEffect() {
-        suspendedPlayerIndex = null;
-        effectPlayerIndex = null;
+        if (effectPlayerStack.isEmpty()) {
+            throw new IllegalStateException("No temporary effect to end");
+        }
+
+        effectPlayerStack.pop();
     }
     Set<String> mutableLegalMoves() { return legalPieceIds; }
     Set<PlayerColor> mutableSkips() { return skips; }

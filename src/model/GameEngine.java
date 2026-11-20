@@ -491,15 +491,29 @@ public final class GameEngine {
             GameSession session,
             String pieceId,
             Question question,
-            boolean correct) {
+            boolean correct)  {
+    	
+    	
+    	
+    	
 
         Piece piece = Objects.requireNonNull(
             session.findPiece(pieceId)
         );
 
-        if (piece.color() != session.current().color()) {
-            throw new IllegalArgumentException("Wrong player");
-        }
+        boolean isCurrentPlayer =
+        	    piece.color() == session.current().color();
+
+        	boolean isAuthorizedEffectPlayer =
+        	    session.hasTemporaryEffectPlayer()
+        	    && session.effectPlayerIndex() != null
+        	    && session.players()
+        	        .get(session.effectPlayerIndex())
+        	        .color() == piece.color();
+
+        	if (!isCurrentPlayer && !isAuthorizedEffectPlayer) {
+        	    throw new IllegalArgumentException("Wrong player");
+        	}
 
         int reward =
             question.movementReward() * (correct ? 1 : -1);
@@ -521,6 +535,49 @@ public final class GameEngine {
             + "."
         );
     }
+
+
+
+    public MoveFeedback resolveOpponentQuestion(
+        GameSession session,
+        String pieceId,
+        Question question,
+        boolean correct) {
+
+    Piece piece = Objects.requireNonNull(
+        session.findPiece(pieceId)
+    );
+
+    if (!session.hasTemporaryEffectPlayer()
+            || session.effectPlayerIndex() == null
+            || session.players()
+                .get(session.effectPlayerIndex())
+                .color() != piece.color()) {
+
+        throw new IllegalStateException(
+            "No authorized opponent effect for this piece"
+        );
+    }
+
+    int reward =
+        question.movementReward() * (correct ? 1 : -1);
+
+    MoveFeedback move = shiftPiece(
+        session, piece, reward
+    );
+
+    session.record(
+        session.findPlayer(piece.color()).name()
+        + " answered "
+        + (correct ? "correctly" : "incorrectly")
+        + " ("
+        + question.difficulty().name().toLowerCase()
+        + "). "
+        + move.message()
+        + "."
+    );
+    return move;
+}
 
     public SurpriseFeedback applySurprise(
             GameSession session,
@@ -585,8 +642,8 @@ public final class GameEngine {
                
 
             	text = "Surprise: "
-            		    + session.current().name()
-            		    + " loses their next turn!";
+            	        + session.findPlayer(piece.color()).name()
+            	        + " loses their next turn!";
             }
 
             case ULTRABOOST -> {
