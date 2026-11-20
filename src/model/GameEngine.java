@@ -623,9 +623,7 @@ public final class GameEngine {
             case LOSE_NEXT_TURN -> {
 
                 session.mutableSkips().add(piece.color());
-                // The pending six bonus is canceled by a lost-turn surprise.
-                session.pendingExtraRolls(0);
-                session.ultraNextRoll(false);
+               
 
                 text = "Surprise: "
                     + session.current().name()
@@ -713,7 +711,7 @@ public final class GameEngine {
 
         int count = session.players().size();
 
-        for (int offset = 1; offset <= count * 2; offset++) {
+        for (int offset = 1; offset <= count; offset++) {
 
             int next =
                 (session.currentIndex() + offset) % count;
@@ -745,27 +743,15 @@ public final class GameEngine {
             return;
         }
 
-        for (int offset = 1; offset <= count; offset++) {
+        
+        
 
-            int next =
-                (session.currentIndex() + offset) % count;
-
-            if (!session.players().get(next).hasFinished()) {
-
-                session.currentPlayer(next);
-                session.turn(session.turn() + 1);
-                session.phase(GameSession.Phase.ROLL);
-
-                session.status(
-                    session.current().name()
-                    + "'s turn — roll the dice."
-                );
-
-                return;
-            }
-        }
-
-        session.phase(GameSession.Phase.FINISHED);
+     // All remaining players skipped their turns.
+     // Their skip penalties have already been consumed.
+     session.phase(GameSession.Phase.ROLL);
+     session.dice(null);
+     session.turn(session.turn() + 1);
+     session.status(session.current().name() + "'s turn — roll the dice.");
     }
 
     private void registerFinish(
