@@ -511,8 +511,8 @@ public final class GameEngine {
         );
 
         session.record(
-            session.current().name()
-            + " answered "
+        	    session.findPlayer(piece.color()).name()
+        	    + " answered "
             + (correct ? "correctly" : "incorrectly")
             + " ("
             + question.difficulty().name().toLowerCase()
@@ -541,66 +541,22 @@ public final class GameEngine {
 
         switch (outcome) {
 
-            case DIRECT_FINISH -> {
+        case DIRECT_FINISH -> {
+            new DirectFinishCommand(this, session, piece).execute();
 
-                piece.place(
-                    session.board(),
-                    session.board().path(piece.color()).size() - 1
-                );
+            text = "Surprise: Direct finish! Piece "
+                + (piece.number() + 1)
+                + " reached HOME.";
+        }
 
-                registerFinish(session, session.current());
-
-                text = "Surprise: Direct finish! Piece "
-                    + (piece.number() + 1)
-                    + " reached HOME.";
-            }
-
-            case OPPONENT_BACKWARD -> {
-
-                List<Piece> available = new ArrayList<>();
-
-                for (Player p : session.players()) {
-
-                    if (p.color() != piece.color()) {
-
-                        for (Piece other : p.pieces()) {
-
-                            if (other.state() == Piece.State.TRACK
-                                    || other.state() == Piece.State.HOME) {
-
-                                available.add(other);
-                            }
-                        }
-                    }
-                }
-
-                if (available.isEmpty()) {
-
-                    text = "Surprise: No opponent piece "
-                        + "to move backward.";
-
-                } else {
-
-                    Piece other = available.get(
-                        random.nextInt(available.size())
-                    );
-
-                    int moved =
-                        shiftPiece(session, other, -6).steps();
-
-                    text = "Surprise: "
-                        + other.color().label()
-                        + " piece "
-                        + (other.number() + 1)
-                        + " moved "
-                        + Math.abs(moved)
-                        + " squares backward.";
-                }
-            }
+        case OPPONENT_BACKWARD -> {
+            throw new IllegalStateException(
+                "OPPONENT_BACKWARD requires player selection in GameController"
+            );
+        }
 
             case RETURN_TO_CASTLE -> {
-
-                piece.returnCastle();
+                new ReturnToCastleCommand(piece).execute();
 
                 text = "Surprise: Piece "
                     + (piece.number() + 1)
@@ -608,9 +564,12 @@ public final class GameEngine {
             }
 
             case BACKWARD_THREE -> {
+                BackwardThreeCommand command =
+                    new BackwardThreeCommand(this, session, piece);
 
-                MoveFeedback adjusted =
-                    shiftPiece(session, piece, -3);
+                command.execute();
+
+                MoveFeedback adjusted = command.getResult();
 
                 square = adjusted.steps() == 0
                     ? null : adjusted.squareId();
@@ -622,17 +581,17 @@ public final class GameEngine {
 
             case LOSE_NEXT_TURN -> {
 
-                session.mutableSkips().add(piece.color());
+            	new LoseNextTurnCommand(session, piece.color()).execute();
                
 
-                text = "Surprise: "
-                    + session.current().name()
-                    + " loses their next turn!";
+            	text = "Surprise: "
+            		    + session.current().name()
+            		    + " loses their next turn!";
             }
 
             case ULTRABOOST -> {
 
-                session.ultraNextRoll(true);
+            	new UltraBoostCommand(session).execute();
 
                 text = "Surprise: Immediate UltraBoost "
                     + "extra roll granted!";
@@ -749,7 +708,14 @@ public final class GameEngine {
 
      throw new IllegalStateException("No eligible player found");
     }
+    void finishPieceDirectly(GameSession session, Piece piece) {
+        piece.place(
+            session.board(),
+            session.board().path(piece.color()).size() - 1
+        );
 
+        registerFinish(session, session.findPlayer(piece.color()));
+    }
     private void registerFinish(
             GameSession session,
             Player player) {

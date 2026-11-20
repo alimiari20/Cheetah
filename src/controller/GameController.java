@@ -571,12 +571,10 @@ if (selectingOpponentPiece) {
     return;
 }
 
+
 engine.completeMove(session);
-
-
-            refresh();
-
-            postMatchCheck();
+refresh();
+postMatchCheck();
 
         });
 
@@ -603,11 +601,27 @@ private void resolveOpponentSelection(String opponentPieceId) {
     }
 
     int die = random.nextInt(6) + 1;
-    int stepsBackward = (die + 1) / 2;
 
-    GameEngine.MoveFeedback result =
-            engine.shiftPiece(session, opponent, -stepsBackward);
+    OpponentBackwardCommand command =
+        new OpponentBackwardCommand(engine, session, opponent, die);
 
+    command.execute();
+
+    GameEngine.MoveFeedback result = command.getResult();
+    if (result.steps() != 0 && result.squareId() != null) {
+        Board.Cell landingCell =
+            session.board().cell(result.squareId());
+
+        if (landingCell != null
+                && ("question".equals(landingCell.symbol())
+                    || "surprise".equals(landingCell.symbol()))) {
+
+            System.out.println(
+                "Opponent landed on special square: "
+                + landingCell.symbol()
+            );
+        }
+    }
     selectingOpponentPiece = false;
     eligibleOpponentPieceIds = Set.of();
     pendingSurprisePieceId = null;

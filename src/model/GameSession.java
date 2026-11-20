@@ -22,6 +22,11 @@ public final class GameSession {
     // Earned normal extra rolls wait while immediate surprise rolls resolve.
     private int pendingExtraRolls;
     private boolean surpriseRollInProgress;
+ // The player whose normal turn was interrupted.
+    private Integer suspendedPlayerIndex;
+
+    // The player temporarily resolving an opponent-triggered effect.
+    private Integer effectPlayerIndex;
     private String status = "Roll the dice to begin!";
 
     GameSession(Board board, List<Player> players) {
@@ -43,6 +48,17 @@ public final class GameSession {
     public int pendingExtraRolls() { return pendingExtraRolls; }
     public boolean isSurpriseRollInProgress() { return surpriseRollInProgress; }
     public String status() { return status; }
+    public boolean hasTemporaryEffectPlayer() {
+        return effectPlayerIndex != null;
+    }
+
+    public Integer suspendedPlayerIndex() {
+        return suspendedPlayerIndex;
+    }
+
+    public Integer effectPlayerIndex() {
+        return effectPlayerIndex;
+    }
     public List<String> events() { return Collections.unmodifiableList(events); }
     public Set<String> legalPieceIds() { return Collections.unmodifiableSet(legalPieceIds); }
     public List<PlayerColor> ranking() { return Collections.unmodifiableList(ranking); }
@@ -59,7 +75,30 @@ public final class GameSession {
         if (value < 0) throw new IllegalArgumentException("Negative extra rolls");
         pendingExtraRolls = value;
     }
-    void surpriseRollInProgress(boolean value) { surpriseRollInProgress = value; }
+    void surpriseRollInProgress(boolean value) {
+        surpriseRollInProgress = value;
+    }
+    void beginTemporaryEffect(int playerIndex) {
+        if (effectPlayerIndex != null) {
+            throw new IllegalStateException(
+                "A temporary effect is already active"
+            );
+        }
+
+        if (playerIndex < 0 || playerIndex >= players.size()) {
+            throw new IllegalArgumentException(
+                "Invalid effect player"
+            );
+        }
+
+        suspendedPlayerIndex = currentPlayer;
+        effectPlayerIndex = playerIndex;
+    }
+
+    void endTemporaryEffect() {
+        suspendedPlayerIndex = null;
+        effectPlayerIndex = null;
+    }
     Set<String> mutableLegalMoves() { return legalPieceIds; }
     Set<PlayerColor> mutableSkips() { return skips; }
     List<PlayerColor> mutableRanking() { return ranking; }
