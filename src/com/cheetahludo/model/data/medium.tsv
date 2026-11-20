@@ -22,7 +22,7 @@ CELL	1	2	track	neutral	-	-	-
 CELL	1	3	track	neutral	-	-	-
 CELL	1	4	track	neutral	-	-	-
 CELL	1	5	track	neutral	question	-	yellow
-CELL	1	6	track	neutral	surprise	-	purple
+CELL	1	6	track	neutral	-	-	-
 CELL	1	7	track	neutral	-	-	-
 CELL	1	8	track	neutral	-	-	-
 CELL	1	9	track	neutral	-	-	-
@@ -119,7 +119,7 @@ CELL	6	14	castle	green	-	-	-
 CELL	6	15	castle	green	-	-	-
 CELL	6	16	castle	green	-	-	-
 CELL	6	17	track	neutral	question	-	green
-CELL	7	1	track	neutral	surprise	-	purple
+CELL	7	1	track	neutral	-	-	-
 CELL	7	2	castle	red	-	-	-
 CELL	7	3	castle	red	-	-	-
 CELL	7	4	castle	red	-	-	-

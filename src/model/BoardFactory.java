@@ -19,7 +19,7 @@ import model.SpecialSquareGenerator.Placement;
  * Each difficulty has its own factory that creates the game board for that
  * difficulty. The caller only asks for a board; the concrete factory decides
  * which tracks and how many special squares the board gets
- * (SRS 3.2.2.3.2 - 3.2.2.3.4).
+ * (SRS 3.2.2.3.2 - 3.2.2.3.4 and the board diagrams of the project specification).
  */
 public abstract class BoardFactory {
 
@@ -66,7 +66,7 @@ public abstract class BoardFactory {
 
         @Override public Difficulty difficulty() { return Difficulty.MEDIUM; }
 
-        /** SRS 3.2.2.3.3: 8 protection, 6 question (2 per level) and 4 surprise squares. */
+        /** Medium board diagram (project specification): 8 protection, 6 question (2 per level) and 2 surprise squares. */
         @Override public Board createBoard(Random random) {
             return randomBoard(random,
                 protection(ORIGINAL_TRACK, 4),
@@ -74,7 +74,7 @@ public abstract class BoardFactory {
                 question(MIDDLE_TRACK, "green", 2),
                 question(MIDDLE_TRACK, "yellow", 2),
                 question(MIDDLE_TRACK, "red", 2),
-                surprise(MIDDLE_TRACK, 4));
+                surprise(MIDDLE_TRACK, 2));
         }
     }
 

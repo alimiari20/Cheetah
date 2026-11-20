@@ -43,10 +43,10 @@ class BoardFactoryTest {
         checkBoards(Difficulty.EASY, 4, 0, 0);
     }
 
-    /** SRS 3.2.2.3.3: 8 protection, 6 questions (2 per level), 4 surprises. */
+    /** Medium board diagram: 8 protection, 6 questions (2 per level), 2 surprises. */
     @Test
     void mediumBoardsHaveRequiredSquares() {
-        checkBoards(Difficulty.MEDIUM, 8, 2, 4);
+        checkBoards(Difficulty.MEDIUM, 8, 2, 2);
     }
 
     /** SRS 3.2.2.3.4: 12 protection, 9 questions (3 per level), 3 surprises. */

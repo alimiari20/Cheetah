@@ -39,7 +39,7 @@ public final class EngineTests {
         });
         checkTest("SRS symbol counts",()->{
             verifyCounts(Difficulty.EASY,4,4,0,0);
-            verifyCounts(Difficulty.MEDIUM,8,8,6,4);
+            verifyCounts(Difficulty.MEDIUM,8,8,6,2);
             verifyCounts(Difficulty.HARD,12,12,9,3);
         });
         checkTest("player paths start at exact start squares",()->{
