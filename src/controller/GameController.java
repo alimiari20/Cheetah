@@ -565,7 +565,7 @@ if (selectingOpponentPiece) {
             refresh();
 
 
-resolveSpecial(pieceId, move.squareId(), new HashSet<>(), 0);
+            resolveSpecial(pieceId, move.squareId());
 
 if (selectingOpponentPiece) {
     return;
@@ -634,29 +634,21 @@ private void resolveOpponentSelection(String opponentPieceId) {
     postMatchCheck();
 }
 
-    private void resolveSpecial(
+private void resolveSpecial(
+        String pieceId,
+        String squareId) {
 
-            String pieceId,
+	if (squareId == null
+	        || session.phase() == GameSession.Phase.FINISHED) {
+	    return;
+	}
 
-            String squareId,
+	while (squareId != null
+	        && session.phase() != GameSession.Phase.FINISHED) {
 
-            Set<String> visited,
+	    String nextSquare = null;
 
-            int depth) {
-
-        if (depth >= 4
-
-                || squareId == null
-
-                || session.phase()
-
-                    == GameSession.Phase.FINISHED) {
-
-            return;
-
-        }
-
-        Piece piece = session.findPiece(pieceId);
+	    Piece piece = session.findPiece(pieceId);
 
         if (piece == null
 
@@ -672,9 +664,9 @@ private void resolveOpponentSelection(String opponentPieceId) {
 
             session.board().cell(squareId);
 
-        if (square == null || !visited.add(squareId)) {
-
+        if (square == null) {
             return;
+        
 
         }
 
@@ -739,28 +731,16 @@ private void resolveOpponentSelection(String opponentPieceId) {
             refresh();
 
             Piece updated = session.findPiece(pieceId);
-
             if (updated != null
-
                     && updated.state() != Piece.State.CASTLE
+                    && updated.state() != Piece.State.FINISHED
+                    && !updated.squareId(session.board()).equals(squareId)) {
 
-                    && updated.state() != Piece.State.FINISHED) {
-
-                resolveSpecial(
-
-                    pieceId,
-
-                    updated.squareId(session.board()),
-
-                    visited,
-
-                    depth + 1
-
-                );
+            	nextSquare = updated.squareId(session.board());
 
             }
 
-        } else if ("surprise".equals(square.symbol())) {
+        
 
 } else if ("surprise".equals(square.symbol())) {
     SurpriseOutcome outcome = SurpriseOutcome.draw(random);
@@ -799,15 +779,16 @@ private void resolveOpponentSelection(String opponentPieceId) {
 
     if (feedback.landingSquare() != null
             && !feedback.landingSquare().equals(squareId)) {
-        resolveSpecial(
-            pieceId, feedback.landingSquare(), visited, depth + 1
-        );
+        nextSquare = feedback.landingSquare();
     }
 
-        }
+    } // End surprise
 
+    squareId = nextSquare;
 
-    }
+    } // End while
+
+    } // End resolveSpecial
 
     private void postMatchCheck() {
 
@@ -840,7 +821,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
         refresh();
 
         view.showMatchEnd(session, info);
-
+    
     }
 
     @Override
