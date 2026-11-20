@@ -238,11 +238,9 @@ view.setOpponentSelectionIds(Set.of());
 
             SetupDialog.Config config) {
 
-        if (resolvingDialog) {
-
-            return;
-
-        }
+    	if (resolvingDialog || selectingOpponentPiece) {
+    	    return;
+    	}
 
         tryAction(() -> {
 
