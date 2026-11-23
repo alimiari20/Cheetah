@@ -85,7 +85,7 @@ public final class BoardPanel extends JPanel {
         if(session==null) { d.dispose(); return; }
         Board board=session.board();
         int n=board.size();
-        double square=Math.min((getWidth()-40.0)/n,(getHeight()-40.0)/n);
+        double square=Math.min((getWidth()-22.0)/n,(getHeight()-22.0)/n);   // small margin: the board uses almost all its space
         if(square<=0){d.dispose();return;}
         double size=square*n;
         double x=(getWidth()-size)/2;
@@ -286,9 +286,8 @@ private void drawCastles(Graphics2D d, Board board,
         d.setColor(new Color(96,109,134));
         for(Polygon triangle:quadrants) d.draw(triangle);
         d.setColor(Theme.WHITE);
-        d.setFont(Theme.pixel(Math.max(8f,(float)(s*.28))));
-        d.setColor(new Color(10,16,44));centerText(d,"HOME",cx+2,cy+(s*.14)+2);   // pixel text with a hard shadow
-        d.setColor(Theme.WHITE);centerText(d,"HOME",cx,cy+(s*.14));
+        d.setFont(Theme.font(Math.max(10f,(float)(s*.37)),Font.BOLD));
+        centerText(d,"HOME",cx,cy+(s*.12));
     }
 
     /*
@@ -304,6 +303,24 @@ private void drawCastles(Graphics2D d, Board board,
     private static final String[] HASH_ART={".X.X.","XXXXX",".X.X.","XXXXX",".X.X."};
     private static final String[] ARROW_ART={"....X...","....XX..","XXXXXXX.","XXXXXXXX","XXXXXXX.","....XX..","....X..."};   // points right
 
+    /** Draws one board icon ("star", "question", "surprise" or "start") outside the board, e.g. in a legend. */
+    static void paintLegendIcon(Graphics2D d,String symbol,double cx,double cy,double s) {
+        Map<Character,Color> colors=new HashMap<>();
+        colors.put('O',new Color(14,18,40)); colors.put('L',Color.WHITE);
+        colors.put('Y',new Color(244,174,45)); colors.put('H',new Color(255,230,140));
+        colors.put('C',new Color(221,72,99)); colors.put('G',new Color(147,89,211)); colors.put('P',new Color(255,205,60));
+        colors.put('X',new Color(77,88,104));
+        Object aa=d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+        d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_OFF);
+        switch(symbol) {
+            case "star" -> drawPixelIcon(d,STAR_ART,colors,cx,cy,s*.8/13,0,false);
+            case "question" -> drawPixelIcon(d,QUESTION_ART,colors,cx,cy,s*.8/13,0,false);
+            case "surprise" -> drawPixelIcon(d,GIFT_ART,colors,cx,cy,s*.8/13,0,false);
+            case "start" -> drawPixelIcon(d,HASH_ART,colors,cx,cy,s*.62/7,0,false);
+            default -> {}
+        }
+        d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,aa);
+    }
     private void drawSymbol(Graphics2D d,Board.Cell cell,double cx,double cy,double s) {
         Color ink=new Color(14,18,40);
         Map<Character,Color> colors=new HashMap<>();
@@ -341,7 +358,7 @@ private void drawCastles(Graphics2D d, Board board,
         d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,aa);
     }
     /** Paints square pixel art centred on (cx,cy), rotated by quarter turns; optionally adds a dark outline around X pixels. */
-    private void drawPixelIcon(Graphics2D d,String[] art,Map<Character,Color> colors,double cx,double cy,double u,int turns,boolean outline) {
+    private static void drawPixelIcon(Graphics2D d,String[] art,Map<Character,Color> colors,double cx,double cy,double u,int turns,boolean outline) {
         int h=art.length, w=art[0].length(), size=Math.max(w,h);
         char[][] grid=new char[size+2][size+2];
         for(char[] row:grid) Arrays.fill(row,'.');
@@ -652,21 +669,16 @@ private void drawCastles(Graphics2D d, Board board,
     private void drawHero(Graphics2D d,Piece p,double cx,double cy,double diameter) {
         // a little life: the heroes blink now and then (each one at its own moment)
         int phase=Math.floorMod(p.id().hashCode(),40);
-        paintHero(d,p.number(),Theme.player(p.color()),cx,cy,diameter,(lifeTick+phase)%30==0,false);
+        paintHero(d,p.number(),Theme.player(p.color()),cx,cy,diameter,(lifeTick+phase)%30==0);
     }
-    /**
-     * Paints hero number {@code number} (0 knight, 1 wizard, 2 archer, 3 lancer) centred on (cx,cy).
-     * Also used outside the board, e.g. on the player cards. {@code faded} draws it pale.
-     */
-    static void paintHero(Graphics2D d,int number,Color outfit,double cx,double cy,double diameter,boolean blink,boolean faded) {
+    /** Paints hero number {@code number} (0 knight, 1 wizard, 2 archer, 3 lancer) centred on (cx,cy); also used outside the board. */
+    static void paintHero(Graphics2D d,int number,Color outfit,double cx,double cy,double diameter,boolean blink) {
         int who=Math.floorMod(number,HEROES.length);
         String[] art=HEROES[who];
         Color ink=new Color(14,18,40), skin=new Color(246,200,156);
         double u=diameter*1.3/38.0;                        // size of one "pixel"
         double ox=cx-HERO_CENTRE[who]*u, oy=cy-art.length*u*.55;
         Object aa=d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
-        Composite oldComposite=d.getComposite();
-        if(faded) d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,.35f));
         d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_OFF);
         d.setColor(new Color(10,20,50,70));                 // soft ground shadow
         d.fill(new Ellipse2D.Double(cx-12*u,oy+(art.length-2.8)*u,24*u,3.6*u));
@@ -697,7 +709,6 @@ private void drawCastles(Graphics2D d, Board board,
             d.setColor(c);
             d.fill(new Rectangle2D.Double(Math.floor(ox+col*u),Math.floor(oy+row*u),Math.ceil(u)+.5,Math.ceil(u)+.5));
         }
-        d.setComposite(oldComposite);
         d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,aa);
     }
     private void paintPiece(Graphics2D d, Piece p,
