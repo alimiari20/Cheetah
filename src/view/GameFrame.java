@@ -55,8 +55,7 @@ public final class GameFrame extends JFrame {
     private final JButton rollButton=Theme.button("ROLL DICE  ⚄",true);
     private final JButton passButton=Theme.button("PASS TURN",false);
     private final JPanel leftPlayers=UiKit.transparent();
-    private final JPanel rightPlayers=UiKit.transparent();
-    private final DieFace regularFace=new DieFace(),specialFace=new DieFace();
+    private final DieFace regularFace=new DieFace(false),specialFace=new DieFace(true);
     private final JLabel multiplier=Theme.label("",12,Font.BOLD,Theme.GOLD);
     private final JLabel specialDieLabel =
     	    Theme.label("BOOST DIE", 11, Font.BOLD, Theme.MUTED);
@@ -130,104 +129,95 @@ public final class GameFrame extends JFrame {
         page.add(bottom,BorderLayout.SOUTH);return page;
     }
     private JPanel buildGameScreen(){
-        UiKit.GradientPage root=new UiKit.GradientPage(new BorderLayout(9,12));
-        root.setBorder(new EmptyBorder(11,22,16,22));
-        JPanel head=UiKit.transparent(new BorderLayout(8,4));
-        JButton menu=Theme.button("⌂  MENU",false);menu.addActionListener(e->{if(actions!=null)actions.showMenu();});
-        JButton exit=Theme.button("EXIT GAME",false);exit.addActionListener(e->{if(actions!=null)actions.showMenu();});
-        head.add(menu,BorderLayout.WEST);head.add(exit,BorderLayout.EAST);
-        JPanel title=UiKit.transparent(new GridLayout(1,1));
-        modeLabel.setHorizontalAlignment(SwingConstants.CENTER);title.add(modeLabel);
-        JLabel subtitle=UiKit.sub("CHEETAH LUDO ");title.add(subtitle);
-        head.add(title,BorderLayout.CENTER);
-        clockLabel.setHorizontalAlignment(SwingConstants.CENTER);head.add(clockLabel,BorderLayout.SOUTH);
-        
-        root.add(head, BorderLayout.NORTH);
+        UiKit.NightPage root=new UiKit.NightPage(new BorderLayout(16,10));
+        root.setBorder(new EmptyBorder(12,20,14,20));
 
-        JPanel arena=UiKit.transparent(new BorderLayout(12,0));
+        // top bar: logo | mode + time | menu + exit
+        JPanel head=UiKit.transparent(new BorderLayout(12,0));
+        head.add(new PixelLogo(),BorderLayout.WEST);
+        JPanel info=new UiKit.GlassCard(new FlowLayout(FlowLayout.CENTER,22,4));
+        info.setBorder(new EmptyBorder(5,14,9,18));
+        modeLabel.setFont(Theme.pixel(12));clockLabel.setFont(Theme.pixel(12));
+        info.add(modeLabel);info.add(clockLabel);
+        JPanel infoHolder=UiKit.transparent(new FlowLayout(FlowLayout.CENTER,0,0));infoHolder.add(info);
+        head.add(infoHolder,BorderLayout.CENTER);
+        JPanel exits=UiKit.transparent(new FlowLayout(FlowLayout.RIGHT,10,0));
+        JButton menu=Theme.button("MENU",false);menu.addActionListener(e->{if(actions!=null)actions.showMenu();});
+        JButton exit=Theme.button("EXIT",false);exit.addActionListener(e->{if(actions!=null)actions.showMenu();});
+        for(JButton b:new JButton[]{menu,exit}){b.setFont(Theme.pixel(12));b.setPreferredSize(new Dimension(112,44));exits.add(b);}
+        head.add(exits,BorderLayout.EAST);
+        root.add(head,BorderLayout.NORTH);
+
+        // left: player cards
         leftPlayers.setLayout(new BoxLayout(leftPlayers,BoxLayout.Y_AXIS));
-        rightPlayers.setLayout(new BoxLayout(rightPlayers,BoxLayout.Y_AXIS));
-        JPanel left=UiKit.transparent(new GridBagLayout());left.setPreferredSize(new Dimension(186,400));left.add(leftPlayers);
-        JPanel right=UiKit.transparent(new GridBagLayout());right.setPreferredSize(new Dimension(186,400));right.add(rightPlayers);
-        arena.add(left,BorderLayout.WEST);arena.add(right,BorderLayout.EAST);
-        JPanel boardShell=new UiKit.GlassCard(new BorderLayout());boardShell.setBorder(new EmptyBorder(7,7,7,7));
-        boardPanel.setOpaque(false);boardPanel.setPreferredSize(new Dimension(600,600));
-        boardShell.add(boardPanel,BorderLayout.CENTER);arena.add(boardShell,BorderLayout.CENTER);
-        root.add(arena,BorderLayout.CENTER);
+        JPanel left=UiKit.transparent(new BorderLayout());left.setPreferredSize(new Dimension(250,400));
+        left.add(leftPlayers,BorderLayout.NORTH);
+        root.add(left,BorderLayout.WEST);
 
+        // centre: the board, as big as the window allows
+        boardPanel.setOpaque(false);boardPanel.setPreferredSize(new Dimension(640,640));
+        root.add(boardPanel,BorderLayout.CENTER);
 
-        JPanel hud = new UiKit.GlassCard(new BorderLayout(18, 0));
-
-hud.setBorder(BorderFactory.createCompoundBorder(
-    BorderFactory.createLineBorder(Theme.GOLD, 3, true),
-    new EmptyBorder(10, 13, 10, 13)
-));
-
-// Dice section
-JPanel dice = UiKit.transparent(
-	    new FlowLayout(FlowLayout.LEFT, 10, 0)
-	);
-dice.add(regularFace);
-
-JPanel dieInfo = UiKit.transparent(new GridLayout(2, 1, 0, 3));
-dieInfo.add(UiKit.goldLabel("REGULAR DIE"));
-dieInfo.add(turnLabel);
-dice.add(dieInfo);
-JPanel specialGroup = UiKit.transparent(
-	    new BorderLayout(0, 3)
-	);
-
-	specialGroup.add(specialDieLabel, BorderLayout.NORTH);
-	specialGroup.add(specialFace, BorderLayout.CENTER);
-
-	dice.add(specialGroup);
-	dice.add(multiplier);
-
-hud.add(dice, BorderLayout.WEST);
-
-// Result and movement
-JPanel result = UiKit.transparent(new GridLayout(2, 2, 12, 4));
-
-JLabel resultTitle = Theme.label("REGULAR ROLL", 11, Font.BOLD, Theme.MUTED);
-
-
-result.add(resultTitle);
-result.add(movementTitle);
-result.add(resultValue);
-result.add(movementValue);
-
-result.setPreferredSize(new Dimension(300, 76));
-
-// Status messages
-JPanel status = UiKit.transparent(new BorderLayout(10, 0));
-status.add(result, BorderLayout.WEST);
-
-JPanel messages = UiKit.transparent(new GridLayout(2, 1, 0, 3));
-
-phaseLabel.setHorizontalAlignment(SwingConstants.CENTER);
-instruction.setHorizontalAlignment(SwingConstants.CENTER);
-
-messages.add(phaseLabel);
-messages.add(instruction);
-
-status.add(messages, BorderLayout.CENTER);
-hud.add(status, BorderLayout.CENTER);
-
-// Buttons
-JPanel controls = UiKit.transparent(new GridLayout(2, 1, 0, 7));
-
-controls.add(rollButton);
-controls.add(passButton);
-controls.setPreferredSize(new Dimension(184, 91));
-
-hud.add(controls, BorderLayout.EAST);
-
-root.add(hud, BorderLayout.SOUTH);
-return root;
-
+        // right: everything about the current turn
+        JPanel turn=new UiKit.GlassCard(new GridBagLayout());
+        turn.setBorder(new EmptyBorder(16,16,20,20));
+        turn.setPreferredSize(new Dimension(270,400));
+        GridBagConstraints c=new GridBagConstraints();
+        c.gridx=0;c.fill=GridBagConstraints.HORIZONTAL;c.weightx=1;c.insets=new Insets(0,0,10,0);
+        turnLabel.setHorizontalAlignment(SwingConstants.CENTER);turn.add(turnLabel,c);
+        JPanel dice=UiKit.transparent(new FlowLayout(FlowLayout.CENTER,14,0));
+        JPanel regularGroup=UiKit.transparent(new BorderLayout(0,4));
+        JLabel regularDieLabel=Theme.label("DIE",11,Font.BOLD,Theme.MUTED);regularDieLabel.setFont(Theme.pixel(8));
+        regularDieLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        regularGroup.add(regularFace,BorderLayout.CENTER);regularGroup.add(regularDieLabel,BorderLayout.SOUTH);
+        JPanel specialGroup=UiKit.transparent(new BorderLayout(0,4));
+        specialDieLabel.setFont(Theme.pixel(8));specialDieLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        specialGroup.add(specialFace,BorderLayout.CENTER);specialGroup.add(specialDieLabel,BorderLayout.SOUTH);
+        dice.add(regularGroup);dice.add(specialGroup);
+        dice.setMinimumSize(new Dimension(200,96));                   // never squash the dice
+        turn.add(dice,c);
+        multiplier.setHorizontalAlignment(SwingConstants.CENTER);multiplier.setFont(Theme.pixel(10));
+        turn.add(multiplier,c);
+        JPanel result=UiKit.transparent(new GridLayout(2,2,10,2));
+        result.add(Theme.label("REGULAR ROLL",10,Font.BOLD,Theme.MUTED));result.add(movementTitle);
+        result.add(resultValue);result.add(movementValue);
+        movementTitle.setFont(Theme.font(10,Font.BOLD));resultValue.setFont(Theme.pixel(20));movementValue.setFont(Theme.font(12,Font.BOLD));
+        turn.add(result,c);
+        phaseLabel.setHorizontalAlignment(SwingConstants.CENTER);instruction.setHorizontalAlignment(SwingConstants.CENTER);
+        phaseLabel.setFont(Theme.font(11,Font.BOLD));
+        turn.add(phaseLabel,c);turn.add(instruction,c);
+        rollButton.setText("ROLL DICE");rollButton.setFont(Theme.pixel(14));rollButton.setPreferredSize(new Dimension(220,56));
+        passButton.setFont(Theme.pixel(10));passButton.setPreferredSize(new Dimension(220,44));
+        c.insets=new Insets(8,0,10,0);turn.add(rollButton,c);
+        c.insets=new Insets(0,0,0,0);turn.add(passButton,c);
+        JLabel logTitle=Theme.label("LAST MOVES",10,Font.BOLD,Theme.GOLD);logTitle.setFont(Theme.pixel(9));
+        c.insets=new Insets(22,0,6,0);turn.add(logTitle,c);
+        activity.setEditable(false);activity.setFocusable(false);activity.setOpaque(false);
+        activity.setFont(Theme.font(12,Font.PLAIN));activity.setForeground(new Color(200,215,245));activity.setBorder(null);
+        activity.setColumns(1);                                       // width comes from the panel, text wraps
+        // the list sits in a scroll pane of fixed size, so a long history never squeezes the dice and buttons
+        JScrollPane log=new JScrollPane(activity,ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER,ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        log.setOpaque(false);log.getViewport().setOpaque(false);log.setBorder(null);
+        log.setPreferredSize(new Dimension(220,120));log.setMinimumSize(new Dimension(100,40));
+        c.insets=new Insets(0,0,0,0);c.weighty=1;c.fill=GridBagConstraints.BOTH;turn.add(log,c);
+        root.add(turn,BorderLayout.EAST);
+        return root;
+    }
+    /** "CHEETAH LUDO" written in the pixel font, gold and white with a hard shadow. */
+    private static final class PixelLogo extends JComponent {
+        PixelLogo(){setPreferredSize(new Dimension(300,44));}
+        @Override protected void paintComponent(Graphics g){
+            Graphics2D d=(Graphics2D)g.create();
+            d.setFont(Theme.pixel(22));
+            int y=32, x=8, gap=d.getFontMetrics().stringWidth("CHEETAH ");
+            d.setColor(new Color(4,10,30));d.drawString("CHEETAH",x+3,y+3);d.drawString("LUDO",x+gap+3,y+3);
+            d.setColor(Theme.GOLD);d.drawString("CHEETAH",x,y);
+            d.setColor(Theme.WHITE);d.drawString("LUDO",x+gap,y);
+            d.dispose();
+        }
     }
     public void render(GameSession session){
-        boardPanel.setSession(session);modeLabel.setText("★  "+session.difficulty().label().toUpperCase()+"  ★");
+        boardPanel.setSession(session);modeLabel.setText(session.difficulty().label().toUpperCase());
         turnCounter.setText("TURN  "+String.format("%02d",session.turn()));
         Player player=session.current();turnLabel.setText("● "+player.name().toUpperCase());turnLabel.setForeground(Theme.player(player.color()));
         phaseLabel.setText(switch(session.phase()){
@@ -279,6 +269,10 @@ if (session.phase() == GameSession.Phase.FINISHED) {
 
 instruction.setText(text);
 
+        List<String> events=session.events();                       // newest moves first
+        StringBuilder log=new StringBuilder();
+        for(int i=events.size()-1;i>=Math.max(0,events.size()-6);i--) log.append("> ").append(events.get(i)).append('\n');
+        activity.setText(log.toString().trim());activity.setCaretPosition(0);   // keep the newest move in view
         updatePlayers(session);
         clockSession=session;updateClock();
         if(session.phase()==GameSession.Phase.FINISHED)clock.stop();else if(!clock.isRunning())clock.start();
@@ -312,30 +306,47 @@ instruction.setText(text);
         return result.isEmpty() ? "NO LEGAL MOVES" : result;
     }
     private void updatePlayers(GameSession session){
-        leftPlayers.removeAll();rightPlayers.removeAll();
-        for(int i=0;i<session.players().size();i++){
-            Player p=session.players().get(i);
-            JPanel card=new UiKit.GlassCard(new BorderLayout(4,8),16);
-            card.setBorder(new EmptyBorder(12,12,11,12));
-            card.setPreferredSize(new Dimension(182,105));
-            card.setMaximumSize(new Dimension(185,115));
+        leftPlayers.removeAll();
+        for(Player p:session.players()){
             boolean active=p==session.current()&&session.phase()!=GameSession.Phase.FINISHED;
-            if (active) {
-                card.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(Theme.GOLD, 3, true),
-                    new EmptyBorder(9, 9, 8, 9)
-                ));
-            }
-            JLabel name=Theme.label("●  "+p.name(),12,Font.BOLD,active?Theme.GOLD:Theme.WHITE);
-            name.setForeground(active?Theme.GOLD:Theme.player(p.color()));card.add(name,BorderLayout.NORTH);
-            JPanel circles=UiKit.transparent(new FlowLayout(FlowLayout.LEFT,5,0));
-            for(int j=0;j<4;j++)circles.add(Theme.label(j<p.finishedCount()?"★":"●",16,Font.BOLD,
-                    j<p.finishedCount()?Theme.GOLD:Theme.player(p.color())));
-            card.add(circles,BorderLayout.CENTER);
-            card.add(Theme.label(p.finishedCount()+" / 4 HOME   •   "+p.castleCount()+" CASTLE",10,Font.PLAIN,Theme.MUTED),BorderLayout.SOUTH);
-            JPanel target=(i%2==0?leftPlayers:rightPlayers);target.add(card);target.add(Box.createVerticalStrut(13));
+            leftPlayers.add(new PlayerCard(p,active));leftPlayers.add(Box.createVerticalStrut(12));
         }
-        leftPlayers.revalidate();rightPlayers.revalidate();
+        leftPlayers.revalidate();leftPlayers.repaint();
+    }
+    /** Player card: name, "YOUR TURN" tag, the player's four heroes and how many are home / in the castle. */
+    private static final class PlayerCard extends JComponent {
+        private final Player player; private final boolean active;
+        PlayerCard(Player player,boolean active){
+            this.player=player;this.active=active;
+            setPreferredSize(new Dimension(246,140));setMaximumSize(new Dimension(250,140));setAlignmentX(LEFT_ALIGNMENT);
+        }
+        @Override protected void paintComponent(Graphics g){
+            Graphics2D d=(Graphics2D)g.create();
+            int w=getWidth()-6,h=getHeight()-8,top=8;
+            Color team=Theme.player(player.color());
+            d.setColor(new Color(4,10,30,170));d.fillRect(4,top+4,w,h);                       // hard shadow
+            d.setColor(active?team:new Color(40,62,128));d.fillRect(0,top,w,h);                  // border
+            d.setColor(new Color(16,36,96));d.fillRect(4,top+4,w-8,h-8);                         // fill
+            d.setColor(team);d.fillRect(16,top+18,12,12);                                        // colour square
+            d.setFont(Theme.pixel(12));d.setColor(Theme.WHITE);
+            d.drawString(player.name().toUpperCase(),36,top+30);
+            if(active){                                                                          // "YOUR TURN" tag
+                d.setFont(Theme.pixel(8));
+                int tw=d.getFontMetrics().stringWidth("YOUR TURN")+14, tx=w-tw-8;
+                d.setColor(new Color(10,16,44));d.fillRect(tx,0,tw,22);
+                d.setColor(Theme.GOLD);d.fillRect(tx+2,2,tw-4,18);
+                d.setColor(new Color(10,16,44));d.drawString("YOUR TURN",tx+7,15);
+            }
+            for(Piece piece:player.pieces()){                                                  // the four heroes
+                double cx=40+piece.number()*((w-44)/4.0), cy=top+72;
+                boolean done=piece.state()==Piece.State.FINISHED;
+                BoardPanel.paintHero(d,piece.number(),team,cx,cy,44,false,false);
+                if(done){d.setColor(Theme.GOLD);d.setFont(Theme.pixel(10));d.drawString("\u2605",(int)cx-5,(int)cy+34);}
+            }
+            d.setFont(Theme.pixel(8));d.setColor(Theme.MUTED);
+            d.drawString(player.finishedCount()+"/4 HOME   "+player.castleCount()+" CASTLE",16,top+h-14);
+            d.dispose();
+        }
     }
     public void showMatchEnd(GameSession session,String persistenceMessage){
         JDialog dialog=new JDialog(this,"CHEETAH LUDO  •  FINAL RANKINGS",true);
@@ -396,20 +407,23 @@ instruction.setText(text);
         getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(key,0),id);
         getRootPane().getActionMap().put(id,new AbstractAction(){public void actionPerformed(ActionEvent e){action.run();}});
     }
+    /** Pixel-style die: white (or gold for the boost die) with square pips, solid outline and a hard shadow. */
     private static final class DieFace extends JComponent {
-        private int value;
-        DieFace(){setPreferredSize(new Dimension(62,62));}
+        private int value; private final boolean boost;
+        DieFace(boolean boost){this.boost=boost;setPreferredSize(new Dimension(68,68));}
         void setValue(int v){value=v;repaint();}
         @Override protected void paintComponent(Graphics g){
-            Graphics2D d=(Graphics2D)g.create();d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            d.setColor(new Color(0,0,0,45));d.fillRoundRect(5,6,55,55,13,13);
-            d.setPaint(new GradientPaint(0,0,new Color(255,255,255),55,55,new Color(195,227,255)));
-            d.fillRoundRect(2,1,55,55,12,12);d.setColor(new Color(76,149,235));d.setStroke(new BasicStroke(2));d.drawRoundRect(2,1,55,55,12,12);
-            d.setColor(new Color(24,87,196));
-            if(value<=0){d.setFont(Theme.font(25,Font.BOLD));d.drawString("?",21,37);}
-            else{int[][] pts={{15,14},{29,14},{43,14},{15,28},{29,28},{43,28},{15,42},{29,42},{43,42}};
+            Graphics2D d=(Graphics2D)g.create();
+            int s=60; Color ink=new Color(10,16,44);
+            d.setColor(new Color(4,10,30,190));d.fillRect(6,6,s,s);                         // hard shadow
+            d.setColor(ink);d.fillRect(0,0,s,s);                                             // outline
+            d.setColor(boost?new Color(255,226,130):new Color(250,250,252));d.fillRect(4,4,s-8,s-8);
+            d.setColor(boost?new Color(255,240,190):Color.WHITE);d.fillRect(4,4,s-8,4);     // top shine
+            d.setColor(ink);
+            if(value<=0){d.setFont(Theme.pixel(22));d.drawString("?",20,42);}
+            else{int[][] pts={{17,17},{30,17},{43,17},{17,30},{30,30},{43,30},{17,43},{30,43},{43,43}};
                  int[][] index={{4},{0,8},{0,4,8},{0,2,6,8},{0,2,4,6,8},{0,2,3,5,6,8}};
-                 for(int i:index[Math.min(6,value)-1])d.fillOval(pts[i][0]-3,pts[i][1]-4,8,8);}
+                 for(int i:index[Math.min(6,value)-1])d.fillRect(pts[i][0]-5,pts[i][1]-5,10,10);}
             d.dispose();
         }
     }

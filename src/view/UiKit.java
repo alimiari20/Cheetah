@@ -22,15 +22,44 @@ public final class UiKit {
             super.paintComponent(g);
         }
     }
-    public static class GlassCard extends JPanel {
-        private final int arc;
-        public GlassCard(LayoutManager layout){this(layout,20);}
-        public GlassCard(LayoutManager layout,int arc){super(layout);this.arc=arc;setOpaque(false);}
+    /** Game screen background: pixel night sky with stars and castle silhouettes (matches the pixel heroes). */
+    public static class NightPage extends JPanel {
+        public NightPage(LayoutManager layout){super(layout);setOpaque(false);}
         @Override protected void paintComponent(Graphics g){
-            Graphics2D d=(Graphics2D)g.create();d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            d.setColor(new Color(4,15,53,82));d.fillRoundRect(1,4,getWidth()-3,getHeight()-6,arc,arc);
-            d.setColor(new Color(24,57,132,216));d.fillRoundRect(1,1,getWidth()-3,getHeight()-5,arc,arc);
-            d.setColor(new Color(82,135,229,125));d.setStroke(new BasicStroke(1f));d.drawRoundRect(1,1,getWidth()-3,getHeight()-5,arc,arc);
+            Graphics2D d=(Graphics2D)g.create();
+            int w=getWidth(),h=getHeight(),P=6;
+            Color[] bands={new Color(24,62,150),new Color(20,52,132),new Color(16,43,114),new Color(12,35,97),new Color(9,28,82),new Color(7,23,70)};
+            for(int i=0;i<bands.length;i++){d.setColor(bands[i]);d.fillRect(0,h*i/bands.length,w,h/bands.length+1);}
+            java.util.Random random=new java.util.Random(7);                 // fixed seed: the sky does not flicker
+            for(int i=0;i<80;i++){                                           // small stars only, so they never sit on top of text
+                int x=random.nextInt(Math.max(1,w))/P*P, y=random.nextInt(Math.max(1,h*6/10))/P*P;
+                d.setColor(new Color(255,255,255,70+random.nextInt(110)));d.fillRect(x,y,2,2);
+            }
+            d.setColor(new Color(10,30,88));                                 // hills
+            for(int x=0;x<w;x+=P){int hh=(int)(170+60*Math.sin(x/140.0)+25*Math.sin(x/53.0))/P*P;d.fillRect(x,h-hh-60,P,hh+60);}
+            Color ink=new Color(5,14,44);
+            int[][] towers={{0,90,300},{90,60,230},{150,50,370},{200,70,250},{w-270,70,260},{w-200,50,380},{w-150,90,290},{w-60,60,230}};
+            for(int[] t:towers){                                             // castle towers at the two edges {x, width, height}
+                int x=t[0]/P*P,tw=t[1]/P*P,th=t[2]/P*P;
+                d.setColor(ink);d.fillRect(x,h-th,tw,th);
+                for(int k=0;k<tw;k+=2*P)d.fillRect(x+k,h-th-P*2,P,P*2);
+                d.setColor(new Color(255,205,60));d.fillRect(x+tw/2-P/2,h-th+P*4,P,P*2);  // lit window
+            }
+            d.setColor(ink);d.fillRect(0,h-40,w,40);
+            d.dispose();
+            super.paintComponent(g);
+        }
+    }
+    /** Panel in the pixel style of the board: flat dark fill, solid border and a hard shadow. */
+    public static class GlassCard extends JPanel {
+        public GlassCard(LayoutManager layout){this(layout,20);}
+        public GlassCard(LayoutManager layout,int arc){super(layout);setOpaque(false);}
+        @Override protected void paintComponent(Graphics g){
+            Graphics2D d=(Graphics2D)g.create();
+            int w=getWidth(),h=getHeight();
+            d.setColor(new Color(4,10,30,170));d.fillRect(4,4,w-4,h-4);              // hard shadow
+            d.setColor(new Color(40,62,128));d.fillRect(0,0,w-4,h-4);               // border
+            d.setColor(new Color(16,36,96,240));d.fillRect(3,3,w-10,h-10);         // fill
             d.dispose();super.paintComponent(g);
         }
     }
@@ -45,22 +74,24 @@ public final class UiKit {
             setPreferredSize(new Dimension(140,42));
         }
         @Override protected void paintComponent(Graphics g){
-            Graphics2D d=(Graphics2D)g.create();d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            Color a,b,stroke;
-            switch(active?Kind.GOLD:kind) {
-                case GOLD -> {a=new Color(255,218,33);b=new Color(255,160,0);stroke=new Color(255,223,87);}
-                case GREEN -> {a=new Color(15,229,168);b=new Color(7,170,128);stroke=new Color(78,246,202);}
-                case RED -> {a=new Color(244,40,78);b=new Color(193,17,54);stroke=new Color(251,91,123);}
-                case DARK -> {a=new Color(10,25,70);b=new Color(7,17,44);stroke=new Color(57,94,159);}
-                default -> {a=new Color(40,102,246);b=new Color(24,66,176);stroke=new Color(77,147,255);}
-            }
+            Graphics2D d=(Graphics2D)g.create();
+            Color a=switch(active?Kind.GOLD:kind) {
+                case GOLD -> new Color(255,200,30);
+                case GREEN -> new Color(15,200,150);
+                case RED -> new Color(230,40,70);
+                case DARK -> new Color(14,30,80);
+                default -> new Color(40,102,246);
+            };
             if(active)setForeground(Theme.NAVY);else setForeground(kind==Kind.GOLD?Theme.NAVY:Theme.WHITE);
-            if(!isEnabled()){a=Theme.blend(a,Theme.DEEP,.62f);b=Theme.blend(b,Theme.DEEP,.62f);}
-            else if(getModel().isRollover()){a=a.brighter();b=b.brighter();}
-            if(getModel().isPressed()){a=a.darker();b=b.darker();}
-            int w=getWidth(),h=getHeight();
-            d.setPaint(new GradientPaint(0,1,a,w,h,b));d.fillRoundRect(1,1,w-3,h-4,15,15);
-            d.setColor(stroke);d.setStroke(new BasicStroke(1.1f));d.drawRoundRect(1,1,w-3,h-4,15,15);
+            if(!isEnabled()) a=Theme.blend(a,Theme.DEEP,.62f);
+            else if(getModel().isRollover()) a=a.brighter();
+            if(getModel().isPressed()) a=a.darker();
+            int w=getWidth(),h=getHeight(),press=getModel().isPressed()?2:0;
+            Color ink=new Color(10,16,44);
+            if(isEnabled() && press==0){d.setColor(new Color(4,10,30,200));d.fillRect(4,4,w-4,h-4);}   // hard pixel shadow
+            d.setColor(ink);d.fillRect(press,press,w-4,h-4);                                          // solid outline
+            d.setColor(a);d.fillRect(press+3,press+3,w-10,h-10);                                     // flat face
+            d.setColor(Theme.blend(a,Color.WHITE,.35f));d.fillRect(press+3,press+3,w-10,3);          // top shine
             d.dispose();super.paintComponent(g);
         }
     }

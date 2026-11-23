@@ -37,6 +37,22 @@ public final class Theme {
                 (int)(a.getBlue()*(1-k)+b.getBlue()*k));
     }
     public static Font font(float size,int style){return new Font("SansSerif",style,Math.round(size));}
+    private static Font pixelBase;
+    /**
+     * Pixel font "Press Start 2P" (SIL Open Font License, see fonts/OFL.txt) for titles and buttons,
+     * so the interface matches the pixel-art board. Falls back to a monospaced font if it cannot be loaded.
+     * It has Latin letters, digits and basic punctuation only: no symbols such as arrows or stars.
+     */
+    public static Font pixel(float size){
+        if(pixelBase==null){
+            try(java.io.InputStream in=Theme.class.getResourceAsStream("fonts/PressStart2P-Regular.ttf")){
+                pixelBase=Font.createFont(Font.TRUETYPE_FONT,in);
+            }catch(Exception e){
+                pixelBase=new Font(Font.MONOSPACED,Font.BOLD,12);
+            }
+        }
+        return pixelBase.deriveFont(size);
+    }
     public static JLabel label(String text,int size,int weight,Color color){
         JLabel l=new JLabel(text);l.setFont(font(size,weight));l.setForeground(color);return l;
     }

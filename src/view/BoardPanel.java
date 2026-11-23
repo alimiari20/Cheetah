@@ -15,6 +15,8 @@ import java.util.function.Consumer;
 public final class BoardPanel extends JPanel {
     private GameSession session;
     private float glowPhase = 0f;
+    private int lifeTick;                                  // drives the blinking and the bouncing "move me" arrow
+    private final javax.swing.Timer lifeTimer = new javax.swing.Timer(150, e -> { if (session != null) { lifeTick++; repaint(); } });
     private Set<String> opponentSelectionIds = Set.of();
     private final javax.swing.Timer glowTimer =
         new javax.swing.Timer(40, e -> {
@@ -35,6 +37,7 @@ public final class BoardPanel extends JPanel {
         setBackground(Theme.SURFACE);
         setPreferredSize(new Dimension(710,710));
         glowTimer.start();
+        lifeTimer.start();
         MouseAdapter mouse = new MouseAdapter() {
         	@Override
         	public void mouseClicked(MouseEvent e) {
@@ -98,10 +101,15 @@ public final class BoardPanel extends JPanel {
         for(int row=1;row<=n;row++)for(int col=1;col<=n;col++) {
             Board.Cell cell=board.cell(row,col);
             double xx=x+(col-1)*square, yy=y+(row-1)*square;
-            d.setColor(cellFill(cell));
-            d.fill(new Rectangle2D.Double(xx,yy,square,square));
-            d.setColor(Theme.LINE);
-            d.setStroke(new BasicStroke(.65f));
+            Color fill=cellFill(cell);
+            double bevel=Math.max(1,Math.round(square*.1));
+            d.setColor(fill); d.fill(new Rectangle2D.Double(xx,yy,square,square));
+            d.setColor(Theme.blend(fill,Color.WHITE,.65f));                     // pixel bevel: light top-left
+            d.fill(new Rectangle2D.Double(xx,yy,square,bevel)); d.fill(new Rectangle2D.Double(xx,yy,bevel,square));
+            d.setColor(Theme.blend(fill,new Color(20,30,70),.08f));             // soft shade bottom-right
+            d.fill(new Rectangle2D.Double(xx,yy+square-bevel,square,bevel)); d.fill(new Rectangle2D.Double(xx+square-bevel,yy,bevel,square));
+            d.setColor(new Color(120,134,170));
+            d.setStroke(new BasicStroke(.8f));
             d.draw(new Rectangle2D.Double(xx,yy,square,square));
         }
         drawCastles(d,board,x,y,square);
@@ -278,81 +286,103 @@ private void drawCastles(Graphics2D d, Board board,
         d.setColor(new Color(96,109,134));
         for(Polygon triangle:quadrants) d.draw(triangle);
         d.setColor(Theme.WHITE);
-        d.setFont(Theme.font(Math.max(10f,(float)(s*.37)),Font.BOLD));
-        centerText(d,"HOME",cx,cy+(s*.12));
+        d.setFont(Theme.pixel(Math.max(8f,(float)(s*.28))));
+        d.setColor(new Color(10,16,44));centerText(d,"HOME",cx+2,cy+(s*.14)+2);   // pixel text with a hard shadow
+        d.setColor(Theme.WHITE);centerText(d,"HOME",cx,cy+(s*.14));
     }
 
+    /*
+     * Board icons drawn as pixel art, in the same style as the hero pieces.
+     * Letters: O outline, Y gold, H gold highlight, C icon colour, L white, G gift, P ribbon, X filled (outline added automatically).
+     */
+    private static final String[] STAR_ART={".....O.....","....OHO....","....OYO....","OOOOYYYOOOO","OHYYYYYYYYO",".OYYYYYYYO.",
+        "..OYYYYYO..","..OYYOYYO..",".OYYO.OYYO.",".OYO...OYO.",".OO.....OO."};
+    private static final String[] QUESTION_ART={"...OOOOO...","..OCCCCCO..",".OCCLLLCCO.","OCCLLCLLCCO","OCCCCCLLCCO","OCCCCLLCCCO",
+        "OCCCCLLCCCO","OCCCCCCCCCO",".OCCCLLCCO.","..OCCCCCO..","...OOOOO..."};
+    private static final String[] GIFT_ART={"..OO...OO..",".OPPO.OPPO.","..OOPOPOO..","OOOOOOOOOOO","OGGGGPGGGGO","OOOOOOOOOOO",
+        ".OGGGPGGGO.",".OGGGPGGGO.",".OGGGPGGGO.",".OGGGPGGGO.",".OOOOOOOOO."};
+    private static final String[] HASH_ART={".X.X.","XXXXX",".X.X.","XXXXX",".X.X."};
+    private static final String[] ARROW_ART={"....X...","....XX..","XXXXXXX.","XXXXXXXX","XXXXXXX.","....XX..","....X..."};   // points right
+
     private void drawSymbol(Graphics2D d,Board.Cell cell,double cx,double cy,double s) {
-        double radius=s*.29;
+        Color ink=new Color(14,18,40);
+        Map<Character,Color> colors=new HashMap<>();
+        colors.put('O',ink); colors.put('L',Color.WHITE);
+        colors.put('Y',new Color(244,174,45)); colors.put('H',new Color(255,230,140));
+        Object aa=d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+        d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_OFF);
+        double u=s*.8/13;
         switch(cell.symbol()) {
-            case "star" -> {
-                d.setColor(new Color(244,174,45));
-                Polygon star=new Polygon();
-                for(int i=0;i<10;i++) {
-                    double angle=-Math.PI/2 + Math.PI*i/5;
-                    double rr=i%2==0?radius:radius*.47;
-                    star.addPoint((int)(cx+Math.cos(angle)*rr),(int)(cy+Math.sin(angle)*rr));
-                }
-                d.fill(star);
-            }
+            case "star" -> drawPixelIcon(d,STAR_ART,colors,cx,cy,u,0,false);
             case "question" -> {
-                Color c= switch (cell.specialColor()) {
+                colors.put('C',switch (cell.specialColor()) {
                     case "yellow" -> new Color(218,151,16);
                     case "green" -> new Color(20,143,109);
                     default -> new Color(221,72,99);
-                };
-                d.setColor(c);d.fill(new Ellipse2D.Double(cx-radius,cy-radius,radius*2,radius*2));
-                d.setColor(Color.WHITE);d.setFont(Theme.font(Math.max(12f,(float)(s*.54)),Font.BOLD));
-                centerText(d,"?",cx,cy+s*.17);
+                });
+                drawPixelIcon(d,QUESTION_ART,colors,cx,cy,u,0,false);
             }
             case "surprise" -> {
-                d.setColor(new Color(147,89,211));
-                d.fill(new RoundRectangle2D.Double(cx-radius,cy-radius*.65,radius*2,radius*1.65,4,4));
-                d.setColor(Color.WHITE);d.setStroke(new BasicStroke(Math.max(1.3f,(float)(s*.06))));
-                d.draw(new Line2D.Double(cx,cy-radius*.65,cx,cy+radius));
-                d.draw(new Line2D.Double(cx-radius,cy,cx+radius,cy));
+                colors.put('G',new Color(147,89,211)); colors.put('P',new Color(255,205,60));
+                drawPixelIcon(d,GIFT_ART,colors,cx,cy,u,0,false);
             }
             case "start" -> {
-                d.setColor(new Color(77,88,104));
-                d.setFont(Theme.font(Math.max(12f,(float)(s*.4)),Font.BOLD));
-                centerText(d,"#",cx,cy+s*.12);
+                colors.put('X',new Color(77,88,104));
+                drawPixelIcon(d,HASH_ART,colors,cx,cy,s*.62/7,0,false);
             }
             case "arrow" -> {
-                Color arrowColor= parseColor(cell.specialColor())==null?Theme.MUTED:
-                          Theme.player(parseColor(cell.specialColor()));
-                d.setColor(arrowColor);
-                d.setStroke(new BasicStroke(Math.max(2f,(float)(s*.1)),BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
-                double dx=0,dy=0;
-                switch(cell.arrow()) {
-                    case "right" -> dx=1;
-                    case "left" -> dx=-1;
-                    case "down" -> dy=1;
-                    case "up" -> dy=-1;
-                    default -> {}
-                }
-                double len=s*.25;
-                d.draw(new Line2D.Double(cx-dx*len,cy-dy*len,cx+dx*len,cy+dy*len));
-                double hx=cx+dx*len,hy=cy+dy*len;
-                double px=-dy,py=dx;
-                Path2D triangle=new Path2D.Double();
-                triangle.moveTo(hx+dx*len*.38,hy+dy*len*.38);
-                triangle.lineTo(hx-dx*len*.35+px*len*.5,hy-dy*len*.35+py*len*.5);
-                triangle.lineTo(hx-dx*len*.35-px*len*.5,hy-dy*len*.35-py*len*.5);
-                triangle.closePath(); d.fill(triangle);
+                PlayerColor color=parseColor(cell.specialColor());
+                colors.put('X',color==null?Theme.MUTED:Theme.player(color));
+                int turns=switch(cell.arrow()) { case "down" -> 1; case "left" -> 2; case "up" -> 3; default -> 0; };
+                drawPixelIcon(d,ARROW_ART,colors,cx,cy,s*.72/10,turns,true);
             }
             default -> {}
+        }
+        d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,aa);
+    }
+    /** Paints square pixel art centred on (cx,cy), rotated by quarter turns; optionally adds a dark outline around X pixels. */
+    private void drawPixelIcon(Graphics2D d,String[] art,Map<Character,Color> colors,double cx,double cy,double u,int turns,boolean outline) {
+        int h=art.length, w=art[0].length(), size=Math.max(w,h);
+        char[][] grid=new char[size+2][size+2];
+        for(char[] row:grid) Arrays.fill(row,'.');
+        for(int r=0;r<h;r++) for(int c=0;c<w;c++) {
+            int rr=r+(size-h)/2, cc=c+(size-w)/2;
+            for(int t=0;t<turns;t++) { int tmp=rr; rr=cc; cc=size-1-tmp; }     // quarter turn clockwise
+            grid[rr+1][cc+1]=art[r].charAt(c);
+        }
+        if(outline) for(int r=0;r<size+2;r++) for(int c=0;c<size+2;c++) {
+            if(grid[r][c]!='.') continue;
+            for(int dr=-1;dr<=1;dr++) for(int dc=-1;dc<=1;dc++) {
+                int nr=r+dr, nc=c+dc;
+                if(Math.abs(dr)+Math.abs(dc)==1&&nr>=0&&nc>=0&&nr<size+2&&nc<size+2&&grid[nr][nc]=='X') grid[r][c]='O';
+            }
+        }
+        double ox=cx-(size+2)*u/2, oy=cy-(size+2)*u/2;
+        for(int r=0;r<size+2;r++) for(int c=0;c<size+2;c++) {
+            Color color=colors.get(grid[r][c]);
+            if(color==null) continue;
+            d.setColor(color);
+            d.fill(new Rectangle2D.Double(Math.floor(ox+c*u),Math.floor(oy+r*u),Math.ceil(u)+.5,Math.ceil(u)+.5));
         }
     }
 
     private void drawPieces(Graphics2D d,Board board,double x,double y,double s) {
         Map<String,List<Piece>> grouped=new LinkedHashMap<>();
+        // colours that are not playing in this game: a faded stone castle instead of an empty white yard
+        for(PlayerColor color:PlayerColor.values()) {
+            boolean playing=false;
+            for(Player player:session.players()) if(player.color()==color) playing=true;
+            if(playing) continue;
+            double[] yard=castleArea(board,color,x,y,s);
+            if(yard!=null) drawClosedCastle(d,color,yard,s);
+        }
         for(Player player:session.players()) {
             double[] yard=castleArea(board,player.color(),x,y,s);
             for(Piece piece:player.pieces()) {
                 if(piece.state()==Piece.State.CASTLE && yard!=null) {
                     // heroes waiting at home stand in a neat 2x2 group in the middle of their castle
                     double[] c=yardSpot(yard,piece.number());
-                    double diameter=Math.min(Math.min(yard[2],yard[3])*.24,s*1.4);
+                    double diameter=Math.min(Math.min(yard[2],yard[3])*.29,s*1.7);
                     paintPiece(d,piece,c[0],c[1],diameter,
                         opponentSelectionIds.isEmpty() && session.legalPieceIds().contains(piece.id()),
                         opponentSelectionIds.contains(piece.id()));
@@ -415,53 +445,260 @@ private void drawCastles(Graphics2D d, Board board,
         return new double[]{cx+(number%2==0?-dx:dx),cy+(number<2?-dy:dy)};
     }
     /**
-     * Each player's four pieces are four different little pixel heroes:
-     * 1 knight, 2 wizard, 3 archer, 4 ninja. Their outfit is the player's colour.
-     * Letters: O outline, X outfit, H outfit highlight, S steel, K skin, E eyes, B boots, N dark cloth, W wood.
+     * Each player's four pieces are four pixel heroes: 1 knight (sword + shield), 2 wizard (staff),
+     * 3 archer (bow), 4 lancer (spear). Knights wear black armour; their clothes are the player's colour.
+     * Letters: O outline, E eyes, X clothes, H/D clothes light/dark, S/T/s black armour (mid/shine/dark),
+     * K/k skin, M hair, G gold, B boots, W wood, N/n dark cloth, L white, P magic glow, R mouth.
      */
     private static final String[][] HEROES = {
-        {"....OOOOOO....","...OSSSSSSO...","..OSSHSSSSSO..","..OSSSSSSSSO..","..OSOOOOOOSO..","..OSOKEKKESO..","..OOKKKKKKOO..","...OOXXXXOO...",
-         "..OXXSSXXXXO..",".OKOXXSSXXOKO.",".OKOXXXXXXOKO.","..OOXXXXXXOO..","...OXXOOXXO...","...OBBO.OBBO.."},
-        {"......OO......",".....OXXO.....","....OXXHXO....","...OXXXXXXO...","..OXXXXXXXXO..",".OOOOOOOOOOOO.","...OKKKKKKO...","...OKEKKEKO...",
-         "...OKKKKKKO...","..OXXXXXXXXO..",".OXXOXXXXOXXO.",".OKOXXXXXXOKO.","...OXXOOXXO...","...OBBO.OBBO.."},
-        {"....OOOOOO....","...OXXXXXXO...","..OXXHXXXXXO..","..OXOKKKKOXO..","..OXKEKKEKXO..","..OXKKKKKKXO..","...OOKKKKOO...","..OXXXXXXXXOW.",
-         ".OXXXXXXXXXOW.",".OKOXXXXXXOKW.",".OKOXXXXXXO.W.","..OOXXXXXXOOW.","...OXXOOXXO...","...OBBO.OBBO.."},
-        {"....OOOOOO....","...ONNNNNNO...","..ONNNNNNNNO..","..OXXXXXXXXO.X","..ONKEKKEKNOX.","..ONKKKKKKNO..","...ONNNNNNO...","..ONNXXXXNNO..",
-         ".ONNXXXXXXNNO.",".OKONNNNNNOKO.",".OKONNNNNNOKO.","..OONNNNNNOO..","...ONNOONNO...","...OBBO.OBBO.."}};
+        // Knight
+        {"................................",
+         "................................",
+         "................................",
+         "................................",
+         ".........OOOOOOOOOO.............",
+         ".......OOOOOOOOOOOOOO...........",
+         ".......OOMMMMMMMMMMOO...........",
+         ".....OOMMMMMMMMMMMMMMOO.........",
+         ".....OOMMMMMMMMMMMMMMOO.........",
+         "....OOMMMMMMMMMMMMMMMMOO........",
+         "....OOXXXXXXXXXXXXXXXXOO........",
+         "....OOXXXXXXXXXXXXXXXXOO........",
+         "....OOMMKKEEKKKKEEKKMMOO....OO..",
+         "....OOMMKKEEKKKKEEKKMMOO...OOOO.",
+         "....OOMMKKKKRRRRKKKKMMOO...OTTO.",
+         ".....OOMKKKKRRRRKKKKMOO...OOTTOO",
+         "......OOOKKKKKKKKKKOOO....OOTTOO",
+         "......OOOOKKKKKKKKOOOO....OOTTOO",
+         ".....OGGXXXXXXXXXXXXGGO...OOTTOO",
+         "...OOOGGXXXXXXXXXXXXGGOO..OOTTOO",
+         "...OSSOOXXHHXXXXDDXXOOSSOOOOTTOO",
+         ".OOSSSSOOXHHXXXXDDXXOOSSOOOOTTOO",
+         ".OOSTTSOOXXXXGGXXXXXOOSSOOOOTTOO",
+         "OOSSTTSSOOXXGGGGXXXXOOSSOOOOTTOO",
+         "OOSSXXSSOOXXGGGGDXXXOOKKOOGGGGGG",
+         "OOSSXXSSOOXXXGGGDDXXOOKKOOGGGGGG",
+         "OOSSXXSSOOXXXXXXDDXXOOOOOOOOWWOO",
+         "OOSSXXSSOOXXXXXDDDDXOOOOOOOOWWO.",
+         "OOsSSSSsOODDDDDDDDDDOOO..OOOOOO.",
+         ".OOsSSsOOODDDDDDDDDDOO.....OO...",
+         ".OOOOOOOOOGGGGGGGGGGOO..........",
+         "...OOOOOOOGGGGGGGGGGOO..........",
+         ".....OOOOSSSOOOOSSSSOO..........",
+         "......OOSSSSOOOOOSSSOOO.........",
+         "......OOSSSsOO..OSSSsOO.........",
+         ".....OOOSSssOO..OOSSssOOO.......",
+         ".....OBBBBBBOO..OOBBBBBBO.......",
+         "....OOBBBBBOOO..OOOBBBBBOO......",
+         "....OOOOOOOOOO..OOOOOOOOOO......",
+         ".....OOOOOOOO....OOOOOOOO......."},
+        // Wizard
+        {"..................OO..............",
+         ".................OOOO.............",
+         ".................OXXO.............",
+         "...............OOXXXOO............",
+         "...............OOXXHOO............",
+         ".............OOXXXHHOO............",
+         ".............OOXXXHHOO............",
+         "...........OOXXXXXXHOOO...........",
+         "...........OOXXXXXXXDOO...........",
+         ".........OOXXXXXXXXXXDDOO.........",
+         ".........OXXXXGGXXXXXDDDO.........",
+         ".......OOOXXXXGGXXXXXXDDOOO.......",
+         "....OOOOOOOOOOOOOOOOOOOOOOOO......",
+         "....OOOOOOOOOOOOOOOOOOOOOOOOO.....",
+         ".......OOOOKKKKKKKKKkOOOO...OO....",
+         "........OOKKKKKKKKKKkkOO....OOO...",
+         "........OOKKEEKKKKEEkkOO...OPPO...",
+         "........OOKKEEKKKKEEkkOO..OOPPOO..",
+         "........OOLLKKKKKKKKLLOO..OOPPOO..",
+         "........OOLLLKKKKKKLLLOO...OPPOOO.",
+         "........OOLLLLLLLLLLLLOO...OOOWWO.",
+         ".......OOOLLLLLLLLLLLLOOO...OOWWOO",
+         ".......OOXXXOLLLLLLOXXXOO...OOWWOO",
+         ".....OOXXXXXXOLLLLOXXXXXXO..OOWWO.",
+         ".....OOXXXHHXXLLLLXXXXDDXOOOKKOOO.",
+         "....OOXXXHHHXXLLLLXXXXDDXXOOKKOO..",
+         "....OOXXHHHXXXGGXXXXXXDDXXOOWWOO..",
+         "....OOXXHHXXXXGGXXXXXXDDXOOOWWWOO.",
+         "....OOKKOOXXXXGGXXXXXXDDOO..OWWWO.",
+         ".....OKKOOXXXXGGXXXXXDDOO...OOWWOO",
+         ".....OOOOOXXXXGGXXXXDDOO....OOWWOO",
+         "......OOOXXXXXGGXXXXDDOO....OOWWOO",
+         "......OOOXXXXXXXXXXXXDDOO...OOWWOO",
+         ".....OOXXXXXXXXXXXXXXXXDDO..OOWWOO",
+         ".....OXXXXXXXXXXXXXXXXXDDDOOOOWWOO",
+         "....OOXXXXXXXXXXXXXXXXXXDDOOOOWWO.",
+         "....OOOOBBOOOOOOOOOOBBOOOO..OOOOO.",
+         ".....OOOBBOOOOOOOOOOBBOOO....OO..."},
+        // Archer
+        {"...........OOOOOOOO.................",
+         ".........OOOOOOOOOOOO...............",
+         ".........OOXXXXXXXXOO...............",
+         ".......OOXXXXXXXXXXXOOO.............",
+         ".......OOXXXHHXXXXXXDOO.............",
+         "......OOXXXXHHXXXXXXXDOO............",
+         "......OOXXXOKKKKKKOXXXOO....OO......",
+         "......OOXXOKKKKKKKKOXXOO...OOOO.....",
+         "......OOXXKKEEKKEEKKXXOO...OWWO.....",
+         "......OOXXKKEEKKEEKKXXOO..OOWWOOO...",
+         "......OOXXKKKKKKkkKKXXOO..OOWWOOO...",
+         "......OOXXKKKKKKkkKKXXOO..OOWWOOOO..",
+         "......OODDOKKKKKKKKODDOO..OOWW.OOOLL",
+         ".......ODDOOKKKKKKOODDO...OOWW..OOLL",
+         "........OOOOXXXXXXOOOO....OOWW..OOLL",
+         "........OOOXXXXXXXXOOO....OOWW..OOLL",
+         ".......OOXXXXNNXXXXXXOO...OOWW..OOLL",
+         ".....OOXXXXXNNNNXXXXXXXO..OOWW..OOLL",
+         ".....OOXHHXXNNNNXXXXDDXXOOOOWW..OOLL",
+         "....OOXXHHXXNNNNXXXXDDXXOOOOWW..OOLL",
+         "....OOKKOOXXGGGGGGXXDDOOKKOOWW..OOLL",
+         "....OOKKOOXXXGGGGGXXDDOOKKOOWW..OOLL",
+         "....OOKKOOXXXXNNXXXXDDOO..OOWW..OOLL",
+         ".....OKKOOXXXXNNXXXXDDOO..OOWW.OOOLL",
+         ".....OOOOOXXXXNNXXXXDDOO..OOWWOOOO..",
+         ".......OOOXXXXNNXXXXDDOO...OWWOOO...",
+         ".......OOOXXXXXXXXXXDDOO...OOOO.....",
+         "........OOXXXXXXXXXDXDOO....OO......",
+         "........OODXXXXOOODXDXOO............",
+         "........OODDXXOOOOODXXOOO...........",
+         "........OONNNNOO..OONNNOO...........",
+         ".......OOONNNNOO..OONNNNOOO.........",
+         ".......OBBBBBBOO..OOBBBBBBO.........",
+         "......OOBBBBBOOO..OOOBBBBBOO........",
+         "......OOOOOOOOOO..OOOOOOOOOO........",
+         ".......OOOOOOOO....OOOOOOOO........."},
+        // Lancer
+        {"........................................",
+         "........................................",
+         "..................................OO....",
+         ".................................OOOO...",
+         ".............OOOOOOOO............OTTO...",
+         "...........OOOOOOOOOOOO.........OOTTOO..",
+         "...........OOMMMMMMMMOO.........OOSSOO..",
+         "..........OOMMMMMMMMMMOO.........OSSO...",
+         "..........OOXXXXXXXXXXOO..........WW....",
+         "..........OOXXXXXXXXXXOO..........WW....",
+         "..........OOKKEEKKEEKKOO..........WW....",
+         "..........OOKKEEKKEEKKOO..........WW....",
+         "..........OOKKKKRRKKKKOO..........WW....",
+         "...........OOKKKRRKKKOO...........WW....",
+         "...........OOKKKKKKKKO............WW....",
+         ".............OOKKKKOOO............WW....",
+         "..............OOOOOOOOO...........WW....",
+         "..............OOOOOOOOOO..........WW....",
+         "...........OOOOXXXXXXXXXXXOOO.....WW....",
+         ".........OOOOOXXXXXXXXXXXXOOOOO...WW....",
+         ".........OSSOOXXHHXXXXXXXDOOSSO...WW....",
+         ".......OOSSSOOXXHHXXXXXXDDOOSSSOO.WW....",
+         ".......OOSSSOOXXXXXGGXXXDDOOSSSOOOWW....",
+         "......OOSSSSOOXXXGGGGGGXDDOOSSSSOOWW....",
+         "......OOsSSSOOXXGGGGGGGGDDOOSSSsOOWW....",
+         "......OOssSOOOXXGGGGGGGGDDOOOSssOOOW....",
+         "......OOKKOOOOXXXGGGGGGXDDOOOOKKOOOO....",
+         ".......OKKOOOOXXXXXGGXXXDDOOOOKKOOO.....",
+         ".......OOO..OOXXXXXXXXXXDDOO..OOO.......",
+         "........OO..OOXXXXXXXXXXDDOO..OO........",
+         "............OOGGGGGGGGGGGGOO............",
+         "............OOGGGGGGGGGGGGOO............",
+         "............OOSSSSOOOOSSSSOO............",
+         "............OOSSSSOOOOOSSSOOO...........",
+         "............OOSSSsOO..OSSSsOO...........",
+         "...........OOOSSssOO..OOSSssOOO.........",
+         "...........OBBBBBBOO..OOBBBBBBO.........",
+         "..........OOBBBBBOOO..OOOBBBBBOO........",
+         "..........OOOOOOOOOO..OOOOOOOOOO........",
+         "...........OOOOOOOO....OOOOOOOO........."}};
+    /** Column of each sprite's body centre (the weapon makes the sprites different widths). */
+    private static final int[] HERO_CENTRE = {14,16,15,19};
+
+    /** Faded pixel stone castle (closed gate, team flags) for a colour nobody plays. Grid: 26 x 24 pixels. */
+    private void drawClosedCastle(Graphics2D d,PlayerColor color,double[] yard,double s) {
+        double u=Math.max(1,Math.floor(Math.min(yard[2],yard[3]-0)*.86/28));
+        double ox=Math.round(yard[0]+yard[2]/2-13*u), oy=Math.round(yard[1]+yard[3]/2-12*u);
+        Color team=Theme.player(color), stone=new Color(168,176,196), brick=new Color(196,203,220);
+        Color ink=new Color(14,18,40), gate=new Color(60,64,84), bars=new Color(110,116,140);
+        Object aa=d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+        Composite oldComposite=d.getComposite();
+        d.setColor(new Color(255,255,255,130));                                   // fade the whole yard: colour not in the game
+        d.fill(new Rectangle2D.Double(yard[0],yard[1],yard[2],yard[3]));
+        d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,.45f));  // faded castle
+        d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_OFF);
+        int[][] blocks={{6,10,14,13},{10,4,6,8},{1,7,5,16},{20,7,5,16}};      // wall, keep, left tower, right tower
+        for(int[] b:blocks) {
+            castleBox(d,ox,oy,u,b[0],b[1],b[2],b[3],stone,ink);
+            for(int i=0;i<b[2];i+=2) castleBox(d,ox,oy,u,b[0]+i,b[1]-1,1,1,stone,ink);   // battlements
+        }
+        int[][] bricks={{8,13},{15,15},{2,12},{22,17},{3,18},{12,7},{17,12}};
+        for(int[] b:bricks) castlePixel(d,ox,oy,u,b[0],b[1],2,1,brick);
+        int[][] flags={{3,3,6},{22,3,6},{13,0,3}};                               // pole x, top, bottom
+        for(int[] f:flags) { castlePixel(d,ox,oy,u,f[0],f[1],1,f[2]-f[1],ink); castlePixel(d,ox,oy,u,f[0]+1,f[1],3,2,team); }
+        castlePixel(d,ox,oy,u,12,5,2,2,ink); castlePixel(d,ox,oy,u,2,10,1,2,ink); castlePixel(d,ox,oy,u,23,10,1,2,ink);   // windows
+        castleBox(d,ox,oy,u,10,16,6,7,gate,ink);                                   // closed gate
+        for(int i=10;i<16;i+=2) castlePixel(d,ox,oy,u,i,16,1,7,bars);
+        castlePixel(d,ox,oy,u,10,18,6,1,bars); castlePixel(d,ox,oy,u,10,21,6,1,bars);
+        castleBox(d,ox,oy,u,11,11,4,4,team,ink);                                   // team shield
+        castlePixel(d,ox,oy,u,12,12,2,2,Theme.blend(team,Color.WHITE,.5f));
+        d.setComposite(oldComposite);
+        d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,aa);
+    }
+    private void castlePixel(Graphics2D d,double ox,double oy,double u,int x,int y,int w,int h,Color c) {
+        d.setColor(c); d.fill(new Rectangle2D.Double(ox+x*u,oy+y*u,w*u,h*u));
+    }
+    private void castleBox(Graphics2D d,double ox,double oy,double u,int x,int y,int w,int h,Color fill,Color ink) {
+        castlePixel(d,ox,oy,u,x-1,y-1,w+2,h+2,ink); castlePixel(d,ox,oy,u,x,y,w,h,fill);
+    }
 
     private void drawHero(Graphics2D d,Piece p,double cx,double cy,double diameter) {
-        String[] art=HEROES[p.number()%HEROES.length];
-        Color outfit=Theme.player(p.color());
-        double u=diameter*1.18/14.0;                       // size of one "pixel"
-        double ox=cx-7*u, oy=cy-7.6*u;
+        // a little life: the heroes blink now and then (each one at its own moment)
+        int phase=Math.floorMod(p.id().hashCode(),40);
+        paintHero(d,p.number(),Theme.player(p.color()),cx,cy,diameter,(lifeTick+phase)%30==0,false);
+    }
+    /**
+     * Paints hero number {@code number} (0 knight, 1 wizard, 2 archer, 3 lancer) centred on (cx,cy).
+     * Also used outside the board, e.g. on the player cards. {@code faded} draws it pale.
+     */
+    static void paintHero(Graphics2D d,int number,Color outfit,double cx,double cy,double diameter,boolean blink,boolean faded) {
+        int who=Math.floorMod(number,HEROES.length);
+        String[] art=HEROES[who];
+        Color ink=new Color(14,18,40), skin=new Color(246,200,156);
+        double u=diameter*1.3/38.0;                        // size of one "pixel"
+        double ox=cx-HERO_CENTRE[who]*u, oy=cy-art.length*u*.55;
         Object aa=d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+        Composite oldComposite=d.getComposite();
+        if(faded) d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,.35f));
         d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_OFF);
         d.setColor(new Color(10,20,50,70));                 // soft ground shadow
-        d.fill(new Ellipse2D.Double(cx-5*u,oy+13.2*u,10*u,2*u));
+        d.fill(new Ellipse2D.Double(cx-12*u,oy+(art.length-2.8)*u,24*u,3.6*u));
         for(int row=0;row<art.length;row++) for(int col=0;col<art[row].length();col++) {
             Color c=switch(art[row].charAt(col)) {
-                case 'O','E' -> new Color(14,18,40);
+                case 'O' -> ink;
+                case 'E' -> blink && row+1<art.length && art[row+1].charAt(col)=='E' ? skin : ink;
                 case 'X' -> outfit;
                 case 'H' -> Theme.blend(outfit,Color.WHITE,.45f);
-                case 'S' -> new Color(204,212,228);
-                case 'K' -> new Color(246,200,156);
-                case 'B' -> new Color(84,56,36);
-                case 'N' -> new Color(38,40,60);
-                case 'W' -> new Color(176,128,74);
+                case 'D' -> Theme.blend(outfit,ink,.35f);
+                case 'S' -> new Color(54,58,78);
+                case 'T' -> new Color(160,170,200);
+                case 's' -> new Color(32,34,48);
+                case 'K' -> skin;
+                case 'k' -> new Color(214,160,120);
+                case 'M' -> new Color(96,58,32);
+                case 'G' -> new Color(255,196,40);
+                case 'B' -> new Color(96,62,38);
+                case 'W' -> new Color(150,100,56);
+                case 'N' -> new Color(44,46,68);
+                case 'n' -> new Color(80,84,110);
+                case 'L' -> new Color(248,248,252);
+                case 'P' -> Theme.blend(outfit,Color.WHITE,.6f);
+                case 'R' -> new Color(200,90,90);
                 default -> null;
             };
             if(c==null) continue;
             d.setColor(c);
             d.fill(new Rectangle2D.Double(Math.floor(ox+col*u),Math.floor(oy+row*u),Math.ceil(u)+.5,Math.ceil(u)+.5));
         }
+        d.setComposite(oldComposite);
         d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,aa);
-        if(diameter>16) {                                    // small number badge, still matches "Piece 1..4" in messages
-            double b=Math.max(9,diameter*.36), bx=cx+diameter*.34, by=cy-diameter*.62;
-            d.setColor(new Color(14,18,40));d.fill(new RoundRectangle2D.Double(bx-1,by-1,b+2,b+2,4,4));
-            d.setColor(Color.WHITE);d.fill(new RoundRectangle2D.Double(bx,by,b,b,3,3));
-            d.setColor(new Color(14,18,40));d.setFont(Theme.font((float)(b*.8),Font.BOLD));
-            centerText(d,Integer.toString(p.number()+1),bx+b/2,by+b*.8);
-        }
     }
     private void paintPiece(Graphics2D d, Piece p,
             double cx, double cy, double diameter,
@@ -508,6 +745,13 @@ private void drawCastles(Graphics2D d, Board board,
             ));
         }
         drawHero(d,p,cx,cy,diameter);
+        if (legal && !opponentTarget) {                      // bouncing arrow: "move me!"
+            double a=diameter*.22, ay=cy-diameter*1.02-Math.abs(Math.sin(lifeTick*.5))*diameter*.12;
+            Path2D arrow=new Path2D.Double();
+            arrow.moveTo(cx-a,ay); arrow.lineTo(cx+a,ay); arrow.lineTo(cx,ay+a*1.1); arrow.closePath();
+            d.setColor(new Color(255,200,40)); d.fill(arrow);
+            d.setColor(new Color(14,18,40)); d.setStroke(new BasicStroke(1.2f)); d.draw(arrow);
+        }
     }
     private static void centerText(Graphics2D d,String text,double cx,double baseline) {
         FontMetrics m=d.getFontMetrics();
