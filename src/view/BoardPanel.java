@@ -346,9 +346,21 @@ private void drawCastles(Graphics2D d, Board board,
 
     private void drawPieces(Graphics2D d,Board board,double x,double y,double s) {
         Map<String,List<Piece>> grouped=new LinkedHashMap<>();
-        for(Player player:session.players())for(Piece piece:player.pieces()) {
-            if(piece.state()!=Piece.State.FINISHED)
-                grouped.computeIfAbsent(piece.squareId(board),id->new ArrayList<>()).add(piece);
+        for(Player player:session.players()) {
+            double[] yard=castleArea(board,player.color(),x,y,s);
+            for(Piece piece:player.pieces()) {
+                if(piece.state()==Piece.State.CASTLE && yard!=null) {
+                    // heroes waiting at home stand in a neat 2x2 group in the middle of their castle
+                    double[] c=yardSpot(yard,piece.number());
+                    double diameter=Math.min(Math.min(yard[2],yard[3])*.24,s*1.4);
+                    paintPiece(d,piece,c[0],c[1],diameter,
+                        opponentSelectionIds.isEmpty() && session.legalPieceIds().contains(piece.id()),
+                        opponentSelectionIds.contains(piece.id()));
+                    hitTargets.add(new Hit(piece.id(),c[0],c[1],diameter*.6));
+                } else if(piece.state()!=Piece.State.FINISHED) {
+                    grouped.computeIfAbsent(piece.squareId(board),id->new ArrayList<>()).add(piece);
+                }
+            }
         }
         for(Map.Entry<String,List<Piece>> entry:grouped.entrySet()) {
             Board.Position pos=Board.Position.parse(entry.getKey());
@@ -383,6 +395,72 @@ private void drawCastles(Graphics2D d, Board board,
                 count++;
             }
             colorNumber++;
+        }
+    }
+    /** Bounds of a player's castle in pixels {left, top, width, height}, or null if the board has none. */
+    private static double[] castleArea(Board board,PlayerColor color,double x,double y,double s) {
+        int minR=Integer.MAX_VALUE,minC=Integer.MAX_VALUE,maxR=-1,maxC=-1;
+        String name=color.name().toLowerCase(Locale.ROOT);
+        for(Board.Cell cell:board.cells()) {
+            if(!"castle".equals(cell.type())||!name.equals(cell.color())) continue;
+            Board.Position p=Board.Position.parse(cell.id());
+            minR=Math.min(minR,p.row());maxR=Math.max(maxR,p.row());
+            minC=Math.min(minC,p.column());maxC=Math.max(maxC,p.column());
+        }
+        if(maxR<0) return null;
+        return new double[]{x+(minC-1)*s,y+(minR-1)*s,(maxC-minC+1)*s,(maxR-minR+1)*s};
+    }
+    private static double[] yardSpot(double[] a,int number) {
+        double cx=a[0]+a[2]/2,cy=a[1]+a[3]/2,dx=a[2]*.2,dy=a[3]*.2;
+        return new double[]{cx+(number%2==0?-dx:dx),cy+(number<2?-dy:dy)};
+    }
+    /**
+     * Each player's four pieces are four different little pixel heroes:
+     * 1 knight, 2 wizard, 3 archer, 4 ninja. Their outfit is the player's colour.
+     * Letters: O outline, X outfit, H outfit highlight, S steel, K skin, E eyes, B boots, N dark cloth, W wood.
+     */
+    private static final String[][] HEROES = {
+        {"....OOOOOO....","...OSSSSSSO...","..OSSHSSSSSO..","..OSSSSSSSSO..","..OSOOOOOOSO..","..OSOKEKKESO..","..OOKKKKKKOO..","...OOXXXXOO...",
+         "..OXXSSXXXXO..",".OKOXXSSXXOKO.",".OKOXXXXXXOKO.","..OOXXXXXXOO..","...OXXOOXXO...","...OBBO.OBBO.."},
+        {"......OO......",".....OXXO.....","....OXXHXO....","...OXXXXXXO...","..OXXXXXXXXO..",".OOOOOOOOOOOO.","...OKKKKKKO...","...OKEKKEKO...",
+         "...OKKKKKKO...","..OXXXXXXXXO..",".OXXOXXXXOXXO.",".OKOXXXXXXOKO.","...OXXOOXXO...","...OBBO.OBBO.."},
+        {"....OOOOOO....","...OXXXXXXO...","..OXXHXXXXXO..","..OXOKKKKOXO..","..OXKEKKEKXO..","..OXKKKKKKXO..","...OOKKKKOO...","..OXXXXXXXXOW.",
+         ".OXXXXXXXXXOW.",".OKOXXXXXXOKW.",".OKOXXXXXXO.W.","..OOXXXXXXOOW.","...OXXOOXXO...","...OBBO.OBBO.."},
+        {"....OOOOOO....","...ONNNNNNO...","..ONNNNNNNNO..","..OXXXXXXXXO.X","..ONKEKKEKNOX.","..ONKKKKKKNO..","...ONNNNNNO...","..ONNXXXXNNO..",
+         ".ONNXXXXXXNNO.",".OKONNNNNNOKO.",".OKONNNNNNOKO.","..OONNNNNNOO..","...ONNOONNO...","...OBBO.OBBO.."}};
+
+    private void drawHero(Graphics2D d,Piece p,double cx,double cy,double diameter) {
+        String[] art=HEROES[p.number()%HEROES.length];
+        Color outfit=Theme.player(p.color());
+        double u=diameter*1.18/14.0;                       // size of one "pixel"
+        double ox=cx-7*u, oy=cy-7.6*u;
+        Object aa=d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+        d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_OFF);
+        d.setColor(new Color(10,20,50,70));                 // soft ground shadow
+        d.fill(new Ellipse2D.Double(cx-5*u,oy+13.2*u,10*u,2*u));
+        for(int row=0;row<art.length;row++) for(int col=0;col<art[row].length();col++) {
+            Color c=switch(art[row].charAt(col)) {
+                case 'O','E' -> new Color(14,18,40);
+                case 'X' -> outfit;
+                case 'H' -> Theme.blend(outfit,Color.WHITE,.45f);
+                case 'S' -> new Color(204,212,228);
+                case 'K' -> new Color(246,200,156);
+                case 'B' -> new Color(84,56,36);
+                case 'N' -> new Color(38,40,60);
+                case 'W' -> new Color(176,128,74);
+                default -> null;
+            };
+            if(c==null) continue;
+            d.setColor(c);
+            d.fill(new Rectangle2D.Double(Math.floor(ox+col*u),Math.floor(oy+row*u),Math.ceil(u)+.5,Math.ceil(u)+.5));
+        }
+        d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,aa);
+        if(diameter>16) {                                    // small number badge, still matches "Piece 1..4" in messages
+            double b=Math.max(9,diameter*.36), bx=cx+diameter*.34, by=cy-diameter*.62;
+            d.setColor(new Color(14,18,40));d.fill(new RoundRectangle2D.Double(bx-1,by-1,b+2,b+2,4,4));
+            d.setColor(Color.WHITE);d.fill(new RoundRectangle2D.Double(bx,by,b,b,3,3));
+            d.setColor(new Color(14,18,40));d.setFont(Theme.font((float)(b*.8),Font.BOLD));
+            centerText(d,Integer.toString(p.number()+1),bx+b/2,by+b*.8);
         }
     }
     private void paintPiece(Graphics2D d, Piece p,
@@ -429,18 +507,7 @@ private void drawCastles(Graphics2D d, Board board,
                 diameter + 6
             ));
         }
-        d.setColor(new Color(28,44,68,65));
-        d.fill(new Ellipse2D.Double(cx-r+1.8,cy-r+3.5,diameter,diameter));
-        d.setColor(Theme.player(p.color()));
-        d.fill(new Ellipse2D.Double(cx-r,cy-r,diameter,diameter));
-        d.setStroke(new BasicStroke((float)Math.max(1.5,diameter*.09)));
-        d.setColor(Color.WHITE);
-        d.draw(new Ellipse2D.Double(cx-r+1,cy-r+1,diameter-2,diameter-2));
-        if(diameter>16) {
-            d.setColor(Color.WHITE);
-            d.setFont(Theme.font(Math.max(10,(float)(diameter*.42)),Font.BOLD));
-            centerText(d,Integer.toString(p.number()+1),cx,cy+diameter*.15);
-        }
+        drawHero(d,p,cx,cy,diameter);
     }
     private static void centerText(Graphics2D d,String text,double cx,double baseline) {
         FontMetrics m=d.getFontMetrics();
