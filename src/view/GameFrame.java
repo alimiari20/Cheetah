@@ -15,10 +15,12 @@ import java.util.Objects;
 /** Prototype-inspired desktop shell: real menu/setup/game/history/admin screens. */
 public final class GameFrame extends JFrame {
     public interface Actions {
+    	void logoutAdmin();
         void newGame();
         void startConfiguredGame(SetupDialog.Config config);
         GameSession preview(Difficulty difficulty,List<PlayerColor> colors);
         void showMenu();
+        void editAdminAccount();
         void roll();
         void pass();
         void selectPiece(String id);
@@ -68,7 +70,13 @@ public final class GameFrame extends JFrame {
     /** Move history: one short, coloured line per event, newest first, grouped by turn. */
     private final JPanel history=new JPanel();
     private final JButton adminSwitch=Theme.button("GUEST MODE  ▾",false);
+    private final JButton editAccount =
+            Theme.button("EDIT ACCOUNT", false);
     private final JButton adminTools=Theme.button("QUESTION MANAGEMENT",false);
+    private final Component adminToolsGap=Box.createVerticalStrut(10);
+    private final Component editAccountGap=Box.createVerticalStrut(10);
+    
+    private JPanel mainMenuPanel;
     private final JLabel adminStatus=Theme.label("Guest view  •  Local multiplayer",11,Font.PLAIN,Theme.MUTED);
     private boolean adminMode;
     private String currentScreen="MENU";
@@ -114,9 +122,34 @@ public final class GameFrame extends JFrame {
         page.setBorder(new EmptyBorder(26,33,23,33));
         JPanel top=UiKit.transparent(new BorderLayout());
         JPanel account=UiKit.transparent(new GridLayout(2,1,0,8));account.setPreferredSize(new Dimension(254,112));
-        adminSwitch.addActionListener(e->{adminMode=!adminMode;adminSwitch.setText(adminMode?"ADMINISTRATOR  ▴":"GUEST MODE  ▾");
-            adminStatus.setText(adminMode?"Local administrator tools enabled":"Guest view  •  Local multiplayer");
-            adminTools.setVisible(adminMode);});
+
+        adminSwitch.addActionListener(e -> {
+            if (actions == null) return;
+
+            if (adminMode) {
+                actions.logoutAdmin();
+                return;
+            }
+
+            Object[] options = {"PLAYER MODE", "ADMIN MODE", "CANCEL"};
+
+            int choice = JOptionPane.showOptionDialog(
+                this,
+                "Select the mode you want to use:",
+                "SWITCH MODE",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]
+            );
+
+            if (choice == 1) {
+                actions.questionAdmin();
+            }
+        });
+
+
         account.add(adminSwitch);account.add(adminStatus);top.add(account,BorderLayout.WEST);
         JPanel corner=UiKit.transparent(new BorderLayout());
         JLabel local=UiKit.chip("LOCAL MULTIPLAYER  •  2–4 PLAYERS",Theme.MUTED);corner.add(local,BorderLayout.NORTH);
@@ -124,26 +157,46 @@ public final class GameFrame extends JFrame {
         JPanel center=UiKit.transparent(new GridBagLayout());
         JPanel stack=UiKit.transparent();stack.setLayout(new BoxLayout(stack,BoxLayout.Y_AXIS));
         UiKit.Brand brand=new UiKit.Brand();brand.setPreferredSize(new Dimension(410,155));brand.setAlignmentX(Component.CENTER_ALIGNMENT);
+        brand.setMinimumSize(new Dimension(410,125));
         stack.add(brand);stack.add(Box.createVerticalStrut(18));
         // menu buttons stacked with equal gaps; a hidden button (question management for guests) leaves no hole
-        JPanel panel=new UiKit.GlassCard(null);panel.setLayout(new BoxLayout(panel,BoxLayout.Y_AXIS));
+        JPanel panel=new UiKit.GlassCard(null);mainMenuPanel = panel;panel.setLayout(new BoxLayout(panel,BoxLayout.Y_AXIS));
+        
         panel.setBorder(new EmptyBorder(16,16,16,16));
         JButton play=Theme.button("▶   NEW GAME",true);play.addActionListener(e->{if(actions!=null)actions.newGame();});
         JButton history=Theme.button("↺   GAME HISTORY",false);history.addActionListener(e->{if(actions!=null)actions.history();});
         adminTools.addActionListener(e->{if(actions!=null)actions.questionAdmin();});adminTools.setVisible(false);
+        editAccount.addActionListener(e -> {
+            if (actions != null) actions.editAdminAccount();
+        });
+        editAccount.setVisible(false);
         JButton exit=Theme.button("EXIT",false);exit.addActionListener(e->{
+        	
             if(UiKit.confirm(this,"Exit","EXIT CHEETAH LUDO?","Are you sure you want to close the game?","EXIT GAME"))dispose();});
-        JButton[] buttons={play,history,adminTools,exit};
-        for(int i=0;i<buttons.length;i++){
-            JButton b=buttons[i];
+
+        JButton[] buttons = {play, history, adminTools, editAccount, exit};
+        adminToolsGap.setVisible(false);
+        editAccountGap.setVisible(false);
+        for (int i = 0; i < buttons.length; i++) {
+            JButton b = buttons[i];
+
             b.setAlignmentX(Component.CENTER_ALIGNMENT);
-            b.setPreferredSize(new Dimension(333,52));b.setMaximumSize(new Dimension(333,52));
-            if(i>0){Component gap=Box.createVerticalStrut(10);panel.add(gap);
-                if(b==adminTools){final Component g=gap;g.setVisible(false);                      // the gap shows and hides with the button
-                    adminSwitch.addActionListener(ev->SwingUtilities.invokeLater(()->{g.setVisible(adminTools.isVisible());panel.revalidate();}));}}
+            b.setPreferredSize(new Dimension(333, 52));
+            b.setMaximumSize(new Dimension(333, 52));
+
+            if (i > 0) {
+                if (b == adminTools) {
+                    panel.add(adminToolsGap);
+                } else if (b == editAccount) {
+                    panel.add(editAccountGap);
+                } else {
+                    panel.add(Box.createVerticalStrut(10));
+                }
+            }
+
             panel.add(b);
         }
-        panel.setMaximumSize(new Dimension(365,400));panel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.setMaximumSize(new Dimension(365, 450));panel.setAlignmentX(Component.CENTER_ALIGNMENT);
         // the four heroes stand on both sides of the menu
         JPanel row=UiKit.transparent(new BorderLayout(26,0));
         row.add(new HeroPair(0,PlayerColor.RED,1,PlayerColor.GREEN),BorderLayout.WEST);
@@ -323,6 +376,8 @@ public final class GameFrame extends JFrame {
         HeroPair(int first,PlayerColor firstColor,int second,PlayerColor secondColor){
             this.first=first;this.second=second;this.firstColor=firstColor;this.secondColor=secondColor;
             setPreferredSize(new Dimension(200,250));
+            // BorderLayout still uses this preferred width when the outer grid uses minimum sizes.
+            setMinimumSize(new Dimension(getPreferredSize().width,0));
         }
         @Override protected void paintComponent(Graphics g){
             Graphics2D d=(Graphics2D)g.create();
@@ -608,4 +663,37 @@ public final class GameFrame extends JFrame {
     public void setOpponentSelectionIds(Set<String> ids) {
         boardPanel.setOpponentSelectionIds(ids);
     }
+
+
+public void setAdminMode(boolean enabled) {
+    adminMode = enabled;
+
+    adminSwitch.setText(
+        enabled ? "LOG OUT" : "ADMIN LOGIN"
+    );
+
+    adminStatus.setText(
+        enabled
+            ? "Local administrator tools enabled"
+            : "Guest view  •  Local multiplayer"
+    );
+
+    adminTools.setVisible(enabled);
+    editAccount.setVisible(enabled);
+    adminToolsGap.setVisible(enabled);
+    editAccountGap.setVisible(enabled);
+    if (mainMenuPanel != null) {
+        mainMenuPanel.invalidate();
+        mainMenuPanel.revalidate();
+        mainMenuPanel.repaint();
+    }
+    if (!enabled && "ADMIN".equals(currentScreen)) {
+        showMainMenu();
+    }
+
+    screens.revalidate();
+    screens.repaint();
+}
+
+
 }
