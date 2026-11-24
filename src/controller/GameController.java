@@ -438,7 +438,6 @@ private boolean loginAdmin() {
         }
 
         adminAuthenticated = true;
-        view.setAdminMode(true);
         return true;
 
     } catch (IOException | RuntimeException ex) {
@@ -453,6 +452,28 @@ public void logoutAdmin() {
     adminAuthenticated = false;
     view.setAdminMode(false);
 }
+
+    @Override
+    public void openAdminDashboard() {
+        if (!adminAuthenticated && !loginAdmin()) {
+            return;
+        }
+        try {
+            view.showAdminEmail(adminEmailRepository.load().orElse(null), false);
+        } catch (IOException ex) {
+            view.showAdminEmail(null, true);
+        }
+        view.setAdminMode(true);
+    }
+
+    @Override
+    public void showAdminSecurity() {
+        tryAction(() -> {
+            requireAdmin();
+            view.showAdminSecurity(MAX_ADMIN_ATTEMPTS, ADMIN_LOCK_DURATION_MS / 60_000);
+        });
+    }
+
 private void requireAdmin() {
     if (!adminAuthenticated) {
         throw new SecurityException(
@@ -465,11 +486,7 @@ private void requireAdmin() {
     public void questionAdmin() {
 
         tryAction(() -> {
-        	if (!adminAuthenticated && !loginAdmin()) {
-        	    return;
-        	}
-
-        	requireAdmin();
+            requireAdmin();
 
             try {
 
@@ -1185,11 +1202,7 @@ private void resolveSpecial(
             AdminAccountDialog dialog = new AdminAccountDialog(
                 view,
                 adminEmailRepository.load().orElse(null),
-                this::setupAdminEmail,
-                () -> JOptionPane.showMessageDialog(
-                    view,
-                    "Change Password - Coming Soon"
-                )
+                this::setupAdminEmail
             );
             dialog.setVisible(true);
         } catch (IOException ex) {
@@ -1207,7 +1220,9 @@ private void resolveSpecial(
         }
 
         try {
-            dialog.updateEmail(adminEmailRepository.saveFirstEmail(email));
+            String savedEmail = adminEmailRepository.saveFirstEmail(email);
+            dialog.updateEmail(savedEmail);
+            view.showAdminEmail(savedEmail, false);
         } catch (IllegalArgumentException ex) {
             JOptionPane.showMessageDialog(dialog, ex.getMessage(),
                     "Admin Email", JOptionPane.WARNING_MESSAGE);

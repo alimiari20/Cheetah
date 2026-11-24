@@ -105,104 +105,112 @@ if (firstTime) {
 
 
 
-public static boolean showLogin(
-        Component parent,
-        java.util.function.Predicate<char[]> verifyPassword,
-        int maxAttempts) {
+    public static boolean showLogin(Component parent,
+                                    java.util.function.Predicate<char[]> verifyPassword,
+                                    int maxAttempts) {
+        Window owner = parent instanceof Window window ? window : SwingUtilities.getWindowAncestor(parent);
+        JDialog dialog = new JDialog(owner, "Cheetah Ludo — Admin Login", Dialog.ModalityType.APPLICATION_MODAL);
+        JPanel content = new MenuStyle.Page(new BorderLayout(0, 15));
+        content.setBorder(BorderFactory.createEmptyBorder(22, 24, 20, 24));
+        content.add(MenuStyle.label("Admin Login", 28, Font.BOLD, MenuStyle.TEXT), BorderLayout.NORTH);
 
-    Window owner = SwingUtilities.getWindowAncestor(parent);
+        JPanel card = MenuStyle.card(new BorderLayout(), 17);
+        JPanel fields = MenuStyle.column();
+        JPasswordField password = new JPasswordField(26);
+        MenuStyle.field(password);
+        password.setMaximumSize(new Dimension(Integer.MAX_VALUE, password.getPreferredSize().height));
+        JLabel passwordLabel = MenuStyle.label("Administrator password", 14, Font.BOLD, MenuStyle.TEXT);
+        passwordLabel.setLabelFor(password);
+        JLabel status = MenuStyle.label("Attempts remaining: " + maxAttempts, 13, Font.PLAIN, MenuStyle.MUTED);
+        MenuStyle.addLine(fields, passwordLabel, 0);
+        MenuStyle.addLine(fields, password, 7);
+        MenuStyle.addLine(fields, status, 11);
+        card.add(fields);
+        content.add(card, BorderLayout.CENTER);
 
-    JDialog dialog = new JDialog(
-            owner,
-            "Admin Login",
-            Dialog.ModalityType.APPLICATION_MODAL
-    );
+        JButton cancel = MenuStyle.button("CANCEL", false, dialog::dispose);
+        JButton login = MenuStyle.button("LOGIN", true);
+        JPanel buttons = UiKit.transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttons.add(cancel);
+        buttons.add(login);
+        content.add(buttons, BorderLayout.SOUTH);
 
-    JPasswordField passwordField = new JPasswordField(20);
-    JLabel status = new JLabel(
-            "Attempts remaining: " + maxAttempts
-    );
-    status.setForeground(Color.RED);
+        class Attempt {
+            int remaining = maxAttempts;
+            boolean authenticated;
+            RuntimeException failure;
 
-    JButton loginButton = new JButton("LOGIN");
-    JButton cancelButton = new JButton("CANCEL");
+            void submit() {
+                if (!login.isEnabled()) return;
+                char[] entered = password.getPassword();
+                password.setText("");
+                login.setEnabled(false);
+                cancel.setEnabled(false);
+                password.setEnabled(false);
+                dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+                status.setText("Checking password…");
 
-    JPanel fields = new JPanel(new BorderLayout(0, 12));
-    fields.add(
-            new JLabel("Enter your administrator password:"),
-            BorderLayout.NORTH
-    );
-    fields.add(passwordField, BorderLayout.CENTER);
-    fields.add(status, BorderLayout.SOUTH);
+                new SwingWorker<Boolean, Void>() {
+                    @Override protected Boolean doInBackground() {
+                        try {
+                            return verifyPassword.test(entered);
+                        } finally {
+                            Arrays.fill(entered, '\0');
+                        }
+                    }
 
-    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-    buttons.add(cancelButton);
-    buttons.add(loginButton);
+                    @Override protected void done() {
+                        try {
+                            authenticated = get();
+                        } catch (InterruptedException ex) {
+                            Thread.currentThread().interrupt();
+                            failure = new IllegalStateException("Administrator login was interrupted.", ex);
+                        } catch (java.util.concurrent.ExecutionException ex) {
+                            Throwable cause = ex.getCause();
+                            failure = cause instanceof RuntimeException runtime ? runtime
+                                    : new IllegalStateException("Unable to verify administrator password.", cause);
+                        }
 
-    JPanel content = new JPanel(new BorderLayout(0, 15));
-    content.setBorder(
-            BorderFactory.createEmptyBorder(20, 20, 20, 20)
-    );
-    content.add(fields, BorderLayout.CENTER);
-    content.add(buttons, BorderLayout.SOUTH);
+                        if (authenticated || failure != null) {
+                            dialog.dispose();
+                            return;
+                        }
+                        if (--remaining <= 0) {
+                            JOptionPane.showMessageDialog(dialog,
+                                    "Too many failed attempts. Try again in 5 minutes.",
+                                    "Admin Account Locked", JOptionPane.WARNING_MESSAGE);
+                            dialog.dispose();
+                            return;
+                        }
+                        status.setText("Incorrect password. Attempts remaining: " + remaining);
+                        status.setForeground(MenuStyle.GOLD);
+                        login.setEnabled(true);
+                        cancel.setEnabled(true);
+                        password.setEnabled(true);
+                        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+                        password.requestFocusInWindow();
+                    }
+                }.execute();
+            }
+        }
 
-    dialog.setContentPane(content);
-    dialog.getRootPane().setDefaultButton(loginButton);
-    dialog.setDefaultCloseOperation(
-            WindowConstants.DISPOSE_ON_CLOSE
-    );
-
-    final boolean[] authenticated = {false};
-    final int[] attempts = {0};
-
-    loginButton.addActionListener(event -> {
-        char[] entered = passwordField.getPassword();
-        passwordField.setText("");
-
-        boolean valid;
+        Attempt attempt = new Attempt();
+        login.addActionListener(event -> attempt.submit());
+        dialog.setContentPane(content);
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        dialog.getRootPane().setDefaultButton(login);
+        dialog.getRootPane().registerKeyboardAction(event -> {
+            if (cancel.isEnabled()) dialog.dispose();
+        }, KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        dialog.pack();
+        dialog.setLocationRelativeTo(parent);
+        SwingUtilities.invokeLater(password::requestFocusInWindow);
         try {
-            valid = verifyPassword.test(entered);
+            dialog.setVisible(true);
         } finally {
-            Arrays.fill(entered, '\0');
+            password.setText("");
         }
-
-        if (valid) {
-            authenticated[0] = true;
-            dialog.dispose();
-            return;
-        }
-
-        attempts[0]++;
-        int remaining = maxAttempts - attempts[0];
-
-        if (remaining <= 0) {
-            JOptionPane.showMessageDialog(
-                    dialog,
-                    "Too many failed attempts.\n"
-                    + "Admin login is locked for 5 minutes.",
-                    "Admin Account Locked",
-                    JOptionPane.WARNING_MESSAGE
-            );
-            dialog.dispose();
-            return;
-        }
-
-        status.setText(
-                "Incorrect password. Attempts remaining: "
-                + remaining
-        );
-        passwordField.requestFocusInWindow();
-    });
-
-    cancelButton.addActionListener(event -> dialog.dispose());
-
-    dialog.pack();
-    dialog.setLocationRelativeTo(parent);
-    dialog.setVisible(true);
-
-    return authenticated[0];
-}
-
-
-
+        if (attempt.failure != null) throw attempt.failure;
+        return attempt.authenticated;
+    }
 }
