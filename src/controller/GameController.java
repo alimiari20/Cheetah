@@ -5,7 +5,11 @@ import view.*;
 import javax.swing.*;
 
 import model.*;
-
+import security.AdminAuthService;
+import view.AdminAccountDialog;
+import security.AdminLockoutRepository;
+import security.AdminCredentialRepository;
+import security.AdminEmailRepository;
 import java.io.IOException;
 
 import java.nio.file.*;
@@ -33,7 +37,21 @@ public final class GameController
     private final QuestionRepository questionRepository =
 
         new QuestionRepository();
+    private boolean adminAuthenticated = false;
+    private int failedAdminAttempts = 0;
+    private long adminLockedUntil = 0L;
 
+    private static final int MAX_ADMIN_ATTEMPTS = 5;
+    private static final long ADMIN_LOCK_DURATION_MS = 5 * 60 * 1000L;
+    private final AdminAuthService adminAuthService =
+            new AdminAuthService();
+
+    private final AdminCredentialRepository adminCredentials =
+            new AdminCredentialRepository();
+    private final AdminLockoutRepository adminLockoutRepository =
+            new AdminLockoutRepository();
+    private final AdminEmailRepository adminEmailRepository =
+            new AdminEmailRepository();
     private QuestionBank questions;
 
     private GameSession session;
@@ -298,7 +316,7 @@ view.setOpponentSelectionIds(Set.of());
             return;
 
         }
-
+        
         view.showMainMenu();
 
     }
@@ -323,11 +341,135 @@ view.setOpponentSelectionIds(Set.of());
 
     }
 
-    @Override
 
+
+
+
+
+
+
+private boolean loginAdmin() {
+    try {
+        AdminLockoutRepository.LockoutState state =
+                adminLockoutRepository.load();
+
+        failedAdminAttempts = state.failedAttempts();
+        adminLockedUntil = state.lockedUntil();
+
+        long now = System.currentTimeMillis();
+
+        if (now < adminLockedUntil) {
+            long remainingSeconds =
+                    (adminLockedUntil - now + 999) / 1000;
+
+            JOptionPane.showMessageDialog(
+                    view,
+                    "Admin login is locked.\nTry again in "
+                            + remainingSeconds + " seconds.",
+                    "Admin Account Locked",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return false;
+        }
+
+        if (!adminCredentials.exists()) {
+            JOptionPane.showMessageDialog(
+                    view,
+                    "Admin account is not configured.",
+                    "Admin Security",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return false;
+        }
+
+        int remainingAttempts =
+                MAX_ADMIN_ATTEMPTS - failedAdminAttempts;
+
+        boolean authenticated = AdminLoginDialog.showLogin(
+                view,
+                password -> {
+                    try {
+                        boolean valid =
+                                adminAuthService.authenticate(
+                                        password,
+                                        adminCredentials
+                                );
+
+                        if (valid) {
+                            failedAdminAttempts = 0;
+                            adminLockedUntil = 0L;
+
+                            adminLockoutRepository.save(
+                                    failedAdminAttempts,
+                                    adminLockedUntil
+                            );
+
+                            return true;
+                        }
+
+                        failedAdminAttempts++;
+
+                        if (failedAdminAttempts >= MAX_ADMIN_ATTEMPTS) {
+                            adminLockedUntil =
+                                    System.currentTimeMillis()
+                                    + ADMIN_LOCK_DURATION_MS;
+                            failedAdminAttempts = 0;
+                        }
+
+                        adminLockoutRepository.save(
+                                failedAdminAttempts,
+                                adminLockedUntil
+                        );
+
+                        return false;
+
+                    } catch (IOException ex) {
+                        throw new IllegalStateException(
+                                "Unable to update administrator security",
+                                ex
+                        );
+                    }
+                },
+                remainingAttempts
+        );
+
+        if (!authenticated) {
+            return false;
+        }
+
+        adminAuthenticated = true;
+        view.setAdminMode(true);
+        return true;
+
+    } catch (IOException | RuntimeException ex) {
+        view.showError(ex);
+        return false;
+    }
+}
+
+
+@Override
+public void logoutAdmin() {
+    adminAuthenticated = false;
+    view.setAdminMode(false);
+}
+private void requireAdmin() {
+    if (!adminAuthenticated) {
+        throw new SecurityException(
+            "Administrator authentication is required."
+        );
+    }
+}
+
+@Override
     public void questionAdmin() {
 
         tryAction(() -> {
+        	if (!adminAuthenticated && !loginAdmin()) {
+        	    return;
+        	}
+
+        	requireAdmin();
 
             try {
 
@@ -358,6 +500,7 @@ view.setOpponentSelectionIds(Set.of());
     public void saveQuestion(Question question) {
 
         tryAction(() -> {
+        	 requireAdmin();
 
             try {
 
@@ -426,10 +569,11 @@ view.setOpponentSelectionIds(Set.of());
     }
 
     @Override
-
     public void deleteQuestion(String questionId) {
-
         tryAction(() -> {
+            requireAdmin();
+
+          
 
             try {
 
@@ -1032,5 +1176,45 @@ private void resolveSpecial(
         }
 
         return eligible;
+    }
+    @Override
+    public void editAdminAccount() {
+        requireAdmin();
+
+        try {
+            AdminAccountDialog dialog = new AdminAccountDialog(
+                view,
+                adminEmailRepository.load().orElse(null),
+                this::setupAdminEmail,
+                () -> JOptionPane.showMessageDialog(
+                    view,
+                    "Change Password - Coming Soon"
+                )
+            );
+            dialog.setVisible(true);
+        } catch (IOException ex) {
+            view.showError(new IOException(
+                    "Unable to read the administrator email.", ex));
+        }
+    }
+
+    private void setupAdminEmail(AdminAccountDialog dialog) {
+        requireAdmin();
+        String email = JOptionPane.showInputDialog(
+                dialog, "Enter the administrator email address:");
+        if (email == null) {
+            return;
+        }
+
+        try {
+            dialog.updateEmail(adminEmailRepository.saveFirstEmail(email));
+        } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(dialog, ex.getMessage(),
+                    "Admin Email", JOptionPane.WARNING_MESSAGE);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(dialog,
+                    "Unable to save the administrator email. Reopen account settings and try again.",
+                    "Admin Email", JOptionPane.ERROR_MESSAGE);
+        }
     }
 }
