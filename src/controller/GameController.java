@@ -1,5 +1,7 @@
 package controller;
 
+import view.Dialogs;
+
 import view.*;
 
 import javax.swing.*;
@@ -342,7 +344,7 @@ view.setOpponentSelectionIds(Set.of());
     private boolean loginAdmin() {
         try {
             if (!adminAuthService.isProvisioned()) {
-                JOptionPane.showMessageDialog(view,
+                Dialogs.showMessageDialog(view,
                         "No local administrator account exists. Run the following command in a terminal:\n"
                                 + "java -jar CheetahLudo.jar --setup-admin",
                         "Admin Setup", JOptionPane.INFORMATION_MESSAGE);
@@ -370,7 +372,7 @@ view.setOpponentSelectionIds(Set.of());
     private boolean verifyAdminFactor(Component parent, Factor factor) throws IOException {
         var attempts = adminAuthService.attempts(factor);
         if (attempts.lockedSeconds() > 0) {
-            JOptionPane.showMessageDialog(parent,
+            Dialogs.showMessageDialog(parent,
                     "Administrator authentication is locked. Try again in "
                             + attempts.lockedSeconds() + " seconds.",
                     "Admin Account Locked", JOptionPane.WARNING_MESSAGE);
@@ -522,7 +524,7 @@ view.setOpponentSelectionIds(Set.of());
 
                 );
 
-                JOptionPane.showMessageDialog(
+                Dialogs.showMessageDialog(
 
                     view,
 
@@ -583,7 +585,7 @@ view.setOpponentSelectionIds(Set.of());
 
                 );
 
-                JOptionPane.showMessageDialog(
+                Dialogs.showMessageDialog(
 
                     view,
 
@@ -1036,7 +1038,7 @@ private void resolveSpecial(
     public void exportHistory() {
         if(view.isCapturePlaying()) return;
 
-        JFileChooser chooser = new JFileChooser();
+        JFileChooser chooser = Dialogs.fileChooser();
 
         chooser.setDialogTitle(
 
@@ -1082,7 +1084,7 @@ private void resolveSpecial(
 
             int confirm =
 
-                JOptionPane.showConfirmDialog(
+                Dialogs.showConfirmDialog(
 
                     view,
 
@@ -1106,7 +1108,7 @@ private void resolveSpecial(
 
             history.export(path);
 
-            JOptionPane.showMessageDialog(
+            Dialogs.showMessageDialog(
 
                 view,
 
@@ -1200,7 +1202,7 @@ private void resolveSpecial(
             requireAdmin();
             return changeAdminCode(parent, version, generate);
         } catch (IOException | RuntimeException ex) {
-            JOptionPane.showMessageDialog(parent, ex.getMessage(),
+            Dialogs.showMessageDialog(parent, ex.getMessage(),
                     "Admin Security", JOptionPane.ERROR_MESSAGE);
             return false;
         }

@@ -59,6 +59,15 @@
             <classpath><pathelement location="${build.dir}"/></classpath>
         </java>
 
+        <java classname="view.ThemeTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+        <java classname="view.LanguageTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+
         <java classname="model.RepositoryTests" fork="true" failonerror="true">
             <sysproperty key="java.awt.headless" value="true"/>
             <classpath>

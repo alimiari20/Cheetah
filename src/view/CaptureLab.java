@@ -12,7 +12,7 @@ final class CaptureLab extends JPanel {
     private final JComboBox<Difficulty> difficulty = new JComboBox<>(Difficulty.values());
     private final JComboBox<CaptureScenario.Direction> direction = new JComboBox<>(CaptureScenario.Direction.values());
     private final JComboBox<String> speed = new JComboBox<>(new String[]{"1×","0.5×","0.25×"});
-    private final JButton play = new JButton("Play capture");
+    private final JButton play = Theme.button("Play capture",true);
     private final BoardPanel board;
     private final GameEngine engine;
     private CaptureScenario scenario;
@@ -29,7 +29,7 @@ final class CaptureLab extends JPanel {
         controls.add(play);
         JPanel sidebar=new JPanel(new BorderLayout());
         sidebar.add(controls,BorderLayout.NORTH);
-        add(sidebar,BorderLayout.WEST); add(board,BorderLayout.CENTER);
+        add(sidebar,BorderLayout.LINE_START); add(board,BorderLayout.CENTER);
         defend.setSelectedIndex(1);
         direction.setSelectedItem(CaptureScenario.Direction.East);
         resetColors();
@@ -45,9 +45,11 @@ final class CaptureLab extends JPanel {
                     engine.completeMove(scenario.session());
             } finally {
                 for(Component c:controls.getComponents()) c.setEnabled(true);
-                play.setText("Replay capture");
+                Messages.set(play,"Replay capture");
             }
         });
+        Messages.renderCombo(attack); Messages.renderCombo(defend); Messages.renderCombo(color);
+        Messages.renderCombo(other); Messages.renderCombo(difficulty); Messages.renderCombo(direction);
         stage();
     }
 
@@ -59,7 +61,7 @@ final class CaptureLab extends JPanel {
         other.setModel(choices);
     }
     private static void field(JPanel panel,String name,JComboBox<?> control) {
-        JLabel label=new JLabel(name);label.setLabelFor(control);panel.add(label);panel.add(control);
+        JLabel label=Theme.label(name,13,Font.BOLD,Theme.Tone.TEXT);label.setLabelFor(control);panel.add(label);panel.add(control);
     }
     private void stage() {
         scenario=CaptureScenario.create(engine,(Difficulty)difficulty.getSelectedItem(),
@@ -67,6 +69,6 @@ final class CaptureLab extends JPanel {
                 (PlayerColor)other.getSelectedItem(),defend.getSelectedIndex(),
                 (CaptureScenario.Direction)direction.getSelectedItem());
         board.setSession(scenario.session());
-        play.setText("Play capture");
+        Messages.set(play,"Play capture");
     }
 }

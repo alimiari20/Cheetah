@@ -1,5 +1,7 @@
 package view;
 
+import static view.Theme.Tone.*;
+
 import java.awt.*;
 import java.util.*;
 import java.util.List;
@@ -26,24 +28,25 @@ public final class SetupDialog {
 
     public static Config show(JFrame owner) {
         JComboBox<Difficulty> difficulty = new JComboBox<>(Difficulty.values());
+        Messages.renderCombo(difficulty);
         difficulty.setSelectedItem(Difficulty.EASY);
         JComboBox<Integer> count = new JComboBox<>(new Integer[]{2,3,4});
         JTextField[] names = new JTextField[4];
         JPanel fields = new JPanel(new GridBagLayout());
-        fields.setBackground(Color.WHITE);
+        Theme.background(fields,SURFACE);
         GridBagConstraints g = new GridBagConstraints();
         g.insets = new Insets(7,7,7,7);
         g.fill = GridBagConstraints.HORIZONTAL;
         g.gridy = 0; g.gridx = 0; g.weightx = 0;
-        fields.add(Theme.label("DIFFICULTY",12,Font.BOLD,Theme.MUTED),g);
+        fields.add(Theme.label("DIFFICULTY",12,Font.BOLD,MUTED),g);
         g.gridx = 1;g.weightx=1; fields.add(difficulty,g);
         g.gridy++;g.gridx=0;g.weightx=0;
-        fields.add(Theme.label("PLAYERS",12,Font.BOLD,Theme.MUTED),g);
+        fields.add(Theme.label("PLAYERS",12,Font.BOLD,MUTED),g);
         g.gridx=1;g.weightx=1;fields.add(count,g);
         String[] defaults={"Player 1","Player 2","Player 3","Player 4"};
         for(int i=0;i<4;i++) {
             g.gridy++;g.gridx=0;g.weightx=0;
-            fields.add(Theme.label("Player "+(i+1),12,Font.PLAIN,Theme.NAVY),g);
+            fields.add(Theme.label("Player "+(i+1),12,Font.PLAIN,TEXT),g);
             names[i] = new JTextField(defaults[i],18);
             names[i].setFont(Theme.font(14,Font.PLAIN));
             g.gridx=1;g.weightx=1;fields.add(names[i],g);
@@ -55,11 +58,11 @@ public final class SetupDialog {
         count.addActionListener(e->refresh.run());
         refresh.run();
         JPanel outer = new JPanel(new BorderLayout(0,12));
-        outer.setBackground(Color.WHITE);
+        Theme.background(outer,SURFACE);
         outer.setBorder(new EmptyBorder(12,12,12,12));
-        outer.add(Theme.label("START A NEW MATCH",20,Font.BOLD,Theme.NAVY),BorderLayout.NORTH);
+        outer.add(Theme.label("START A NEW MATCH",20,Font.BOLD,TEXT),BorderLayout.NORTH);
         outer.add(fields,BorderLayout.CENTER);
-        int result=JOptionPane.showConfirmDialog(owner,outer,"Cheetah Ludo · Setup",
+        int result=Dialogs.showConfirmDialog(owner,outer,"Cheetah Ludo · Setup",
                 JOptionPane.OK_CANCEL_OPTION,JOptionPane.PLAIN_MESSAGE);
         if(result!=JOptionPane.OK_OPTION) return null;
         int n=(Integer)count.getSelectedItem();
