@@ -24,7 +24,7 @@ final class AdminDashboardPage extends MenuStyle.Page {
         JPanel tools = UiKit.transparent(new GridLayout(2, 2, 12, 12));
         tools.add(MenuStyle.button("QUESTION MANAGEMENT", "Find and maintain the question bank", false, questions));
         tools.add(MenuStyle.button("GAME HISTORY", "Review and export past matches", false, history));
-        tools.add(MenuStyle.button("ACCOUNT SETTINGS", "View your profile and email", false, account));
+        tools.add(MenuStyle.button("ACCOUNT SETTINGS", "View your profile and manage your code", false, account));
         tools.add(MenuStyle.button("SECURITY SETTINGS", "View password and lockout details", false, security));
         tools.setMaximumSize(new Dimension(Integer.MAX_VALUE, tools.getPreferredSize().height));
         MenuStyle.addLine(workspace, tools, 16);
@@ -37,7 +37,7 @@ final class AdminDashboardPage extends MenuStyle.Page {
         c.fill = GridBagConstraints.HORIZONTAL;
         center.add(workspace, c);
         add(MenuStyle.scroll(center), BorderLayout.CENTER);
-        setEmail(null, false);
+        setEmail(null);
     }
 
     private JPanel profile() {
@@ -56,10 +56,8 @@ final class AdminDashboardPage extends MenuStyle.Page {
         return card;
     }
 
-    void setEmail(String email, boolean unavailable) {
-        emailStatus.setText(email == null ? "ACCOUNT EMAIL" : "ACCOUNT EMAIL  /  UNVERIFIED");
-        address.setText(unavailable ? "Email could not be loaded"
-                : email == null ? "Set up an email in Account Settings" : email);
+    void setEmail(String email) {
+        address.setText(email == null ? "" : email);
         address.setCaretPosition(0);
     }
 

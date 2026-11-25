@@ -8,6 +8,7 @@ import model.GameEngine;
 import model.HistoryRepository;
 import model.QuestionBank;
 import view.GameFrame;
+import security.AdminSetup;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -23,6 +24,11 @@ public final class Main {
     }
 
     public static void main(String[] args) {
+        if (args.length == 1 && "--setup-admin".equals(args[0])) {
+            AdminSetup.main(new String[0]);
+            return;
+        }
+
         if (args.length > 0 && "--check".equals(args[0])) {
             checkInstallation();
             return;

@@ -59,7 +59,30 @@ java -jar dist/CheetahLudo.jar
 
 ### Limits versus the prototype PDF
 
-The PDF is a visual prototype with many demonstrations of specific SRS test scenarios. This edition reproduces the **actual interactive game screens**, not every frozen demo sequence or pixel of the web prototype. It does **not** include an authenticated remote administrator account, replayable named SRS demonstration scenes, question archive management, or web services. The administration toggle is **local demo editing access**, not an authentication or security boundary; do not use it to protect sensitive data.
+The PDF is a visual prototype with many demonstrations of specific SRS test scenarios. This edition reproduces the **actual interactive game screens**, not every frozen demo sequence or pixel of the web prototype. It does **not** include an authenticated remote administrator account, replayable named SRS demonstration scenes, or question archive management.
+
+## Offline administrator access
+
+### Prepare the teaching assistant's credentials
+
+1. Choose a unique evaluation password of at least 12 characters and a different random Authentication Code of 16 to 128 characters. Use a password manager to generate and store both values. Keep these credentials separate from your personal administrator credentials.
+2. Deliver **CheetahLudo.jar** through the submission channel. Share the two evaluation credentials privately with the teaching assistant, separately from the submission. The same pair is entered during local setup and subsequent sign-ins.
+3. The teaching assistant needs Java 17 or later and a graphical desktop. In a terminal in the folder containing the submitted JAR, run:
+
+   ```bash
+   java -jar CheetahLudo.jar --setup-admin
+   ```
+
+   Enter and confirm the supplied password, then enter and confirm the supplied Authentication Code. The terminal hides what you type. Run setup once under the same operating-system account that will run the game. An existing administrator account is protected from being overwritten. If that account is for another Cheetah Ludo installation, use a fresh operating-system user profile for evaluation.
+4. Run `java -jar CheetahLudo.jar`, select **Admin Login**, enter the password, and then enter the Authentication Code. **Question Management** and the other administrator tools are available from the dashboard. Setup and sign-in both work offline.
+
+### Existing installations
+
+Enter the existing administrator password in **Admin Login**. If the installation still has a password-only credential file, the app prompts you to create and confirm an Authentication Code before opening the dashboard. Your saved password and profile email carry forward.
+
+Use **Admin Dashboard → Account Settings** to see the code status and change or generate the code. Both actions request the current password and code. Generation displays the new code once, after saving it. Save it before closing the dialog. Each change immediately replaces the previous code.
+
+The password and code use independent salts and PBKDF2-HMAC-SHA256 with 600,000 iterations. The local account uses `${user.home}/.cheetah-ludo/admin.credentials`. The password and code each have a five-attempt limit and a five-minute lockout that survives restarts. The profile email is informational. Lost codes cannot be recovered from their hashes, so keep a secure copy. Anyone who controls the operating-system user profile or can modify the JAR can replace the local application or its state.
 
 The 32 original questions are bundled. Your locally edited question bank is read at the start of a new game.
 

@@ -9,11 +9,11 @@ import java.util.List;
 
 public final class AdminLockoutRepository {
 
-    private static final Path FILE = Path.of(
-            System.getProperty("user.home"),
-            ".cheetah-ludo",
-            "admin.lockout"
-    );
+    private final Path file;
+
+    AdminLockoutRepository(Path file) {
+        this.file = file;
+    }
 
     public record LockoutState(
             int failedAttempts,
@@ -21,11 +21,11 @@ public final class AdminLockoutRepository {
     ) {}
 
     public LockoutState load() throws IOException {
-        if (!Files.exists(FILE)) {
+        if (Files.notExists(file)) {
             return new LockoutState(0, 0L);
         }
 
-        List<String> lines = Files.readAllLines(FILE);
+        List<String> lines = Files.readAllLines(file);
 
         if (lines.size() != 2) {
             throw new IOException("Invalid admin lockout file.");
@@ -35,7 +35,7 @@ public final class AdminLockoutRepository {
             int attempts = Integer.parseInt(lines.get(0));
             long lockedUntil = Long.parseLong(lines.get(1));
 
-            if (attempts < 0 || attempts >= 5 || lockedUntil < 0) {
+            if (attempts < 0 || attempts >= AdminAuthService.MAX_ATTEMPTS || lockedUntil < 0) {
                 throw new IOException("Invalid admin lockout values.");
             }
 
@@ -51,10 +51,10 @@ public final class AdminLockoutRepository {
     public void save(int failedAttempts, long lockedUntil)
             throws IOException {
 
-        Files.createDirectories(FILE.getParent());
+        Files.createDirectories(file.getParent());
 
         Path temp = Files.createTempFile(
-                FILE.getParent(),
+                file.getParent(),
                 "admin-lockout-",
                 ".tmp"
         );
@@ -70,7 +70,8 @@ public final class AdminLockoutRepository {
 
             Files.move(
                     temp,
-                    FILE,
+                    file,
+                    StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING
             );
         } finally {

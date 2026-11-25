@@ -10,116 +10,61 @@ public final class AdminLoginDialog {
     private AdminLoginDialog() {
     }
 
-    public static char[] askPassword(
-            Component parent,
-            boolean firstTime) {
+    public static char[] askNewCode(Component parent, boolean enrollment) {
+        JPanel fields = MenuStyle.card(new GridLayout(0, 1, 0, 6), 16);
+        JPasswordField code = new JPasswordField(26);
+        JPasswordField confirmation = new JPasswordField(26);
+        MenuStyle.field(code);
+        MenuStyle.field(confirmation);
+        JLabel codeLabel = MenuStyle.label("New Authentication Code (16 to 128 characters)",
+                14, Font.BOLD, MenuStyle.TEXT);
+        codeLabel.setLabelFor(code);
+        fields.add(codeLabel);
+        fields.add(code);
+        JLabel confirmLabel = MenuStyle.label("Confirm Authentication Code", 14, Font.BOLD, MenuStyle.TEXT);
+        confirmLabel.setLabelFor(confirmation);
+        fields.add(confirmLabel);
+        fields.add(confirmation);
+        try {
+            int result = JOptionPane.showConfirmDialog(parent, fields,
+                    enrollment ? "Set Up Authentication Code" : "Change Authentication Code",
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+            if (result != JOptionPane.OK_OPTION) {
+                return null;
+            }
 
-        JPasswordField password = new JPasswordField(20);
-        JPasswordField confirmPassword = new JPasswordField(20);
-        JPanel panel = new JPanel(
-            new BorderLayout(0, 12)
-        );
-
-        String message = firstTime
-            ? "Create an administrator password (12+ characters):"
-            : "Enter your administrator password:";
-
-        panel.add(
-            new JLabel(message),
-            BorderLayout.NORTH
-        );
-
-
-if (firstTime) {
-  
-    JPanel fields = new JPanel(
-        new GridLayout(2, 1, 0, 8)
-    );
-
-    fields.add(password);
-    fields.add(confirmPassword);
-
-    panel.add(fields, BorderLayout.CENTER);
-
-} else {
-    panel.add(password, BorderLayout.CENTER);
-}
-
-
-        int result = JOptionPane.showConfirmDialog(
-            parent,
-            panel,
-            firstTime ? "Create Admin Account" : "Admin Login",
-            JOptionPane.OK_CANCEL_OPTION,
-            JOptionPane.PLAIN_MESSAGE
-        );
-
-        if (result != JOptionPane.OK_OPTION) {
-            password.setText("");
-            return null;
-        }
-
-
-char[] entered = password.getPassword();
-
-char[] confirmation = firstTime
-        ? confirmPassword.getPassword()
-        : new char[0];
-
-password.setText("");
-confirmPassword.setText("");
-
-if (firstTime) {
-    boolean matches = Arrays.equals(entered, confirmation);
-    Arrays.fill(confirmation, '\0');
-
-    if (!matches) {
-        Arrays.fill(entered, '\0');
-
-        JOptionPane.showMessageDialog(
-            parent,
-            "Passwords do not match.",
-            "Admin Security",
-            JOptionPane.ERROR_MESSAGE
-        );
-
-        return null;
-    }
-}
-
-
-        if (entered.length == 0) {
+            char[] entered = code.getPassword();
+            char[] confirmed = confirmation.getPassword();
+            boolean matches = Arrays.equals(entered, confirmed);
+            Arrays.fill(confirmed, '\0');
+            if (matches) {
+                return entered;
+            }
             Arrays.fill(entered, '\0');
-            JOptionPane.showMessageDialog(
-                parent,
-                "Password cannot be empty.",
-                "Admin Security",
-                JOptionPane.WARNING_MESSAGE
-            );
+            JOptionPane.showMessageDialog(parent, "The Authentication Codes did not match.",
+                    "Admin Security", JOptionPane.WARNING_MESSAGE);
             return null;
+        } finally {
+            code.setText("");
+            confirmation.setText("");
         }
-
-        return entered;
     }
 
-
-
-
-    public static boolean showLogin(Component parent,
-                                    java.util.function.Predicate<char[]> verifyPassword,
-                                    int maxAttempts) {
+    public static boolean showLogin(Component parent, String title, String fieldLabel, String secretName,
+                                    java.util.function.Predicate<char[]> verify, int maxAttempts,
+                                    long lockoutMinutes) {
         Window owner = parent instanceof Window window ? window : SwingUtilities.getWindowAncestor(parent);
-        JDialog dialog = new JDialog(owner, "Cheetah Ludo — Admin Login", Dialog.ModalityType.APPLICATION_MODAL);
+        JDialog dialog = new JDialog(owner, "Cheetah Ludo — " + title, Dialog.ModalityType.APPLICATION_MODAL);
         JPanel content = new MenuStyle.Page(new BorderLayout(0, 15));
         content.setBorder(BorderFactory.createEmptyBorder(22, 24, 20, 24));
-        content.add(MenuStyle.label("Admin Login", 28, Font.BOLD, MenuStyle.TEXT), BorderLayout.NORTH);
+        content.add(MenuStyle.label(title, 28, Font.BOLD, MenuStyle.TEXT), BorderLayout.NORTH);
 
         JPanel card = MenuStyle.card(new BorderLayout(), 17);
         JPanel fields = MenuStyle.column();
         JPasswordField password = new JPasswordField(26);
         MenuStyle.field(password);
         password.setMaximumSize(new Dimension(Integer.MAX_VALUE, password.getPreferredSize().height));
-        JLabel passwordLabel = MenuStyle.label("Administrator password", 14, Font.BOLD, MenuStyle.TEXT);
+        JLabel passwordLabel = MenuStyle.label(fieldLabel, 14, Font.BOLD, MenuStyle.TEXT);
         passwordLabel.setLabelFor(password);
         JLabel status = MenuStyle.label("Attempts remaining: " + maxAttempts, 13, Font.PLAIN, MenuStyle.MUTED);
         MenuStyle.addLine(fields, passwordLabel, 0);
@@ -148,12 +93,12 @@ if (firstTime) {
                 cancel.setEnabled(false);
                 password.setEnabled(false);
                 dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
-                status.setText("Checking password…");
+                status.setText("Checking " + secretName + "...");
 
                 new SwingWorker<Boolean, Void>() {
                     @Override protected Boolean doInBackground() {
                         try {
-                            return verifyPassword.test(entered);
+                            return verify.test(entered);
                         } finally {
                             Arrays.fill(entered, '\0');
                         }
@@ -168,7 +113,7 @@ if (firstTime) {
                         } catch (java.util.concurrent.ExecutionException ex) {
                             Throwable cause = ex.getCause();
                             failure = cause instanceof RuntimeException runtime ? runtime
-                                    : new IllegalStateException("Unable to verify administrator password.", cause);
+                                    : new IllegalStateException("Unable to verify administrator credential.", cause);
                         }
 
                         if (authenticated || failure != null) {
@@ -177,12 +122,12 @@ if (firstTime) {
                         }
                         if (--remaining <= 0) {
                             JOptionPane.showMessageDialog(dialog,
-                                    "Too many failed attempts. Try again in 5 minutes.",
+                                    "Too many failed attempts. Try again in " + lockoutMinutes + " minutes.",
                                     "Admin Account Locked", JOptionPane.WARNING_MESSAGE);
                             dialog.dispose();
                             return;
                         }
-                        status.setText("Incorrect password. Attempts remaining: " + remaining);
+                        status.setText("Incorrect " + secretName + ". Attempts remaining: " + remaining);
                         status.setForeground(MenuStyle.GOLD);
                         login.setEnabled(true);
                         cancel.setEnabled(true);

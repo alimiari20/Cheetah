@@ -578,12 +578,12 @@ public final class GameFrame extends JFrame {
         adminMode = enabled;
         homeMenuItem.setText(enabled ? "Admin Dashboard" : "Main Menu");
         newGameMenuItem.setEnabled(!enabled);
-        if (!enabled) dashboard.setEmail(null, false);
+        if (!enabled) dashboard.setEmail(null);
         showMainMenu();
     }
 
-    public void showAdminEmail(String email, boolean unavailable) {
-        dashboard.setEmail(email, unavailable);
+    public void showAdminEmail(String email) {
+        dashboard.setEmail(email);
     }
 
     public void showAdminSecurity(int attempts, long minutes) {

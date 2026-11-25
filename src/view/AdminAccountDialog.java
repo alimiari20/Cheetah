@@ -3,15 +3,12 @@ package view;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.util.function.Consumer;
 
 public final class AdminAccountDialog extends JDialog {
-    private final JLabel emailLabel = MenuStyle.label("", 13, Font.BOLD, MenuStyle.GOLD);
+    private final JLabel emailLabel = MenuStyle.label("ACCOUNT EMAIL", 13, Font.BOLD, MenuStyle.GOLD);
     private final JTextField emailField = new JTextField(32);
-    private final JButton setupEmailButton;
-
-    public AdminAccountDialog(JFrame parent, String currentEmail,
-                              Consumer<AdminAccountDialog> onSetupEmail) {
+    public AdminAccountDialog(JFrame parent, String currentEmail, boolean configured,
+                              java.util.function.BiPredicate<Component, Boolean> updateCode) {
         super(parent, "Cheetah Ludo — Account Settings", true);
         JPanel content = dialogContent("Account Settings");
         JPanel profile = MenuStyle.card(new BorderLayout(0, 12), 18);
@@ -25,23 +22,46 @@ public final class AdminAccountDialog extends JDialog {
         emailField.setEditable(false);
         emailField.setMaximumSize(new Dimension(Integer.MAX_VALUE, emailField.getPreferredSize().height));
         MenuStyle.addLine(details, emailField, 4);
-        MenuStyle.addLine(details, MenuStyle.label("Email changes and verification are unavailable.",
+        MenuStyle.addLine(details, MenuStyle.label("Email changes are unavailable.",
                 13, Font.PLAIN, MenuStyle.MUTED), 10);
+        MenuStyle.addLine(details, MenuStyle.label("Authentication Code", 20, Font.BOLD, MenuStyle.TEXT), 20);
+        JLabel status = MenuStyle.label(configured ? "Configured" : "Not Configured",
+                13, Font.BOLD, MenuStyle.GOLD);
+        MenuStyle.addLine(details, status, 6);
+        MenuStyle.addLine(details, MenuStyle.button("Change Authentication Code", false, () -> {
+            if (updateCode.test(this, false)) {
+                status.setText("Configured");
+            }
+        }), 10);
+        MenuStyle.addLine(details, MenuStyle.button("Generate a New Authentication Code", false, () -> {
+            if (updateCode.test(this, true)) {
+                status.setText("Configured");
+            }
+        }), 8);
         profile.add(details, BorderLayout.CENTER);
-        setupEmailButton = MenuStyle.button("SET UP EMAIL", true, () -> onSetupEmail.accept(this));
-        profile.add(setupEmailButton, BorderLayout.SOUTH);
         content.add(profile, BorderLayout.CENTER);
         finish(this, content, parent);
-        updateEmail(currentEmail);
+
+        emailField.setText(currentEmail);
+        emailField.setCaretPosition(0);
         pack();
         setLocationRelativeTo(parent);
     }
 
-    public void updateEmail(String email) {
-        emailLabel.setText(email == null ? "ACCOUNT EMAIL" : "ACCOUNT EMAIL  /  UNVERIFIED");
-        emailField.setText(email == null ? "Not configured yet" : email);
-        emailField.setCaretPosition(0);
-        setupEmailButton.setVisible(email == null);
+    public static void showGeneratedCode(Component parent, char[] code) {
+        JTextField display = new JTextField(new String(code), 32);
+        MenuStyle.field(display);
+        display.setEditable(false);
+        JPanel fields = MenuStyle.card(new GridLayout(0, 1, 0, 8), 16);
+        fields.add(MenuStyle.label("Save this code securely before closing this dialog.",
+                14, Font.BOLD, MenuStyle.TEXT));
+        fields.add(display);
+        try {
+            JOptionPane.showMessageDialog(parent, fields,
+                    "New Authentication Code", JOptionPane.PLAIN_MESSAGE);
+        } finally {
+            display.setText("");
+        }
     }
 
     static void showSecurity(JFrame parent, int attempts, long minutes) {
@@ -49,12 +69,12 @@ public final class AdminAccountDialog extends JDialog {
         JPanel content = dialogContent("Security Settings");
         JPanel card = MenuStyle.card(new BorderLayout(), 18);
         JPanel details = MenuStyle.column();
-        MenuStyle.addLine(details, MenuStyle.label("Administrator password", 20, Font.BOLD, MenuStyle.TEXT), 0);
+        MenuStyle.addLine(details, MenuStyle.label("Password and Authentication Code", 20, Font.BOLD, MenuStyle.TEXT), 0);
         MenuStyle.addLine(details, MenuStyle.label("Password changes are unavailable.",
                 13, Font.PLAIN, MenuStyle.MUTED), 5);
         MenuStyle.addLine(details, MenuStyle.label("LOGIN LOCKOUT", 13, Font.BOLD, MenuStyle.GOLD), 18);
         MenuStyle.addLine(details, MenuStyle.label(
-                attempts + " failed attempts lock sign-in for " + minutes + " minutes.",
+                attempts + " failed attempts per credential lock that step for " + minutes + " minutes.",
                 13, Font.PLAIN, MenuStyle.TEXT), 5);
         card.add(details);
         content.add(card, BorderLayout.CENTER);
