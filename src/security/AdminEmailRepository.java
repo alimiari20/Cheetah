@@ -3,6 +3,7 @@ package security;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -11,6 +12,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 public final class AdminEmailRepository {
+    private static final String INITIAL_EMAIL = "kabiyaarghad@outlook.com";
     private static final String ATOM = "[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+";
     private static final String DOMAIN_LABEL =
             "[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?";
@@ -26,6 +28,19 @@ public final class AdminEmailRepository {
 
     AdminEmailRepository(Path directory) {
         file = directory.resolve("admin.email");
+    }
+
+    public String loadOrInitialize() throws IOException {
+        Optional<String> savedEmail = load();
+        if (savedEmail.isPresent()) {
+            return savedEmail.get();
+        }
+
+        try {
+            return saveFirstEmail(INITIAL_EMAIL);
+        } catch (FileAlreadyExistsException ex) {
+            return load().orElseThrow(() -> ex);
+        }
     }
 
     public Optional<String> load() throws IOException {
