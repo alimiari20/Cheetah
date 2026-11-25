@@ -14,24 +14,36 @@ import java.util.function.Consumer;
 /** HiDPI-friendly scalable, clickable Ludo board. Painting never changes game state. */
 public final class BoardPanel extends JPanel {
     private GameSession session;
-    private Piece captureAttacker;
-    private List<Piece> captureVictims = List.of();
-    private long captureStart;
-    private double captureProgress;
-    public boolean isCapturePlaying() { return captureAttacker != null; }
-    public void playCapture(Piece attacker, List<Piece> victims) {
-        if (victims.isEmpty()) return;
-        captureAttacker=attacker; captureVictims=List.copyOf(victims);
-        captureStart=System.nanoTime(); captureProgress=0;
-        java.awt.SecondaryLoop loop=Toolkit.getDefaultToolkit().getSystemEventQueue().createSecondaryLoop();
-        javax.swing.Timer timer=new javax.swing.Timer(16,null);
-        timer.addActionListener(e->{
-            captureProgress=Math.min(1,(System.nanoTime()-captureStart)/1_050_000_000.0);
-            if(captureProgress>=1){timer.stop();captureAttacker=null;captureVictims=List.of();loop.exit();}
+    private CapturePlayback playback;
+
+    public boolean isCapturePlaying() { return playback != null; }
+
+    boolean playCapture(CaptureMove move, double speed) {
+        if (playback != null) throw new IllegalStateException("A capture is already playing");
+        playback = new CapturePlayback(new CaptureAnimation(move, session.board()), speed, this::repaint);
+        try {
+            return playback.play();
+        } finally {
+            playback = null;
             repaint();
-        });
-        timer.start(); repaint();
-        try { loop.enter(); } finally {timer.stop();captureAttacker=null;captureVictims=List.of();repaint();}
+        }
+    }
+
+    void cancelCapture() {
+        if (playback != null) playback.cancel();
+    }
+
+    @Override public void addNotify() {
+        super.addNotify();
+        lifeTimer.start();
+        glowTimer.start();
+    }
+
+    @Override public void removeNotify() {
+        cancelCapture();
+        lifeTimer.stop();
+        glowTimer.stop();
+        super.removeNotify();
     }
 
     private float glowPhase = 0f;
@@ -56,8 +68,6 @@ public final class BoardPanel extends JPanel {
         setOpaque(false);
         setBackground(Theme.SURFACE);
         setPreferredSize(new Dimension(710,710));
-        glowTimer.start();
-        lifeTimer.start();
         MouseAdapter mouse = new MouseAdapter() {
         	@Override
         	public void mouseClicked(MouseEvent e) {
@@ -92,7 +102,7 @@ public final class BoardPanel extends JPanel {
         addMouseMotionListener(mouse);
     }
     public void setOnSelect(Consumer<String> callback) { onSelect=Objects.requireNonNull(callback); }
-    public void setSession(GameSession value) { session=value;repaint(); }
+    public void setSession(GameSession value) { if (session != value) cancelCapture(); session=value;repaint(); }
     public void setOpponentSelectionIds(Set<String> ids) {
         opponentSelectionIds = Set.copyOf(ids);
         repaint();
@@ -141,24 +151,7 @@ public final class BoardPanel extends JPanel {
             drawSymbol(d,cell,x+(col-.5)*square,y+(row-.5)*square,square);
         }
         drawPieces(d,board,x,y,square);
-        if(captureAttacker!=null){
-            Board.Position pos=Board.Position.parse(captureAttacker.squareId(board));
-            double cx=x+(pos.column()-.5)*square, cy=y+(pos.row()-.5)*square;
-            // Flip at the left edge so the attacker stays on the board.
-            Graphics2D fx=(Graphics2D)d.create();
-            if(pos.column()==1){fx.translate(2*cx,0);fx.scale(-1,1);}
-            for(int i=0;i<captureVictims.size();i++){
-                Piece victim=captureVictims.get(i);
-                double q=Math.max(0,(captureProgress-.48)/.52);
-                Graphics2D v=(Graphics2D)fx.create();
-                v.setComposite(AlphaComposite.SrcOver.derive((float)(1-q)));
-                double shake=q>0?Math.sin(q*35)*square*.12*(1-q):0;
-                paintHero(v,victim.number(),Theme.player(victim.color()),cx+square*(.24+i*.23)+shake,cy-square*(.10+.55*q),square*(.85-.35*q),false);
-                v.dispose();
-            }
-            CaptureAnimation.paint(fx,captureAttacker.number(),captureAttacker.color(),cx,cy,square,captureProgress);
-            fx.dispose();
-        }
+        if (playback != null) playback.animation.paint(d, x, y, square, playback.progress());
         d.setColor(new Color(66,87,114));
         d.setStroke(new BasicStroke(2f));
         d.draw(new RoundRectangle2D.Double(x-1,y-1,size+2,size+2,6,6));
@@ -435,7 +428,7 @@ private void drawCastles(Graphics2D d, Board board,
         for(Player player:session.players()) {
             double[] yard=castleArea(board,player.color(),x,y,s);
             for(Piece piece:player.pieces()) {
-                if(piece==captureAttacker || captureVictims.contains(piece)) continue;
+                if (playback != null && playback.animation.hides(piece)) continue;
                 if(piece.state()==Piece.State.CASTLE && yard!=null) {
                     // heroes waiting at home stand in a neat 2x2 group in the middle of their castle
                     double[] c=yardSpot(yard,piece.number());
@@ -485,7 +478,7 @@ private void drawCastles(Graphics2D d, Board board,
         }
     }
     /** Bounds of a player's castle in pixels {left, top, width, height}, or null if the board has none. */
-    private static double[] castleArea(Board board,PlayerColor color,double x,double y,double s) {
+    static double[] castleArea(Board board,PlayerColor color,double x,double y,double s) {
         int minR=Integer.MAX_VALUE,minC=Integer.MAX_VALUE,maxR=-1,maxC=-1;
         String name=color.name().toLowerCase(Locale.ROOT);
         for(Board.Cell cell:board.cells()) {
@@ -497,7 +490,7 @@ private void drawCastles(Graphics2D d, Board board,
         if(maxR<0) return null;
         return new double[]{x+(minC-1)*s,y+(minR-1)*s,(maxC-minC+1)*s,(maxR-minR+1)*s};
     }
-    private static double[] yardSpot(double[] a,int number) {
+    static double[] yardSpot(double[] a,int number) {
         double cx=a[0]+a[2]/2,cy=a[1]+a[3]/2,dx=a[2]*.2,dy=a[3]*.2;
         return new double[]{cx+(number%2==0?-dx:dx),cy+(number<2?-dy:dy)};
     }
@@ -713,6 +706,13 @@ private void drawCastles(Graphics2D d, Board board,
     }
     /** Paints hero number {@code number} (0 knight, 1 wizard, 2 archer, 3 lancer) centred on (cx,cy); also used outside the board. */
     static void paintHero(Graphics2D d,int number,Color outfit,double cx,double cy,double diameter,boolean blink) {
+        paintHero(d, number, outfit, cx, cy, diameter, blink, true);
+    }
+
+    // In combat the moving weapon is drawn at the hand. Omit its resting artwork.
+    private static final int[] WEAPON_COLUMN = {26, 28, 27, 33};
+    static void paintHero(Graphics2D d,int number,Color outfit,double cx,double cy,double diameter,
+                          boolean blink, boolean restingWeapon) {
         int who=Math.floorMod(number,HEROES.length);
         String[] art=HEROES[who];
         Color ink=new Color(14,18,40), skin=new Color(246,200,156);
@@ -723,6 +723,7 @@ private void drawCastles(Graphics2D d, Board board,
         d.setColor(new Color(10,20,50,70));                 // soft ground shadow
         d.fill(new Ellipse2D.Double(cx-12*u,oy+(art.length-2.8)*u,24*u,3.6*u));
         for(int row=0;row<art.length;row++) for(int col=0;col<art[row].length();col++) {
+            if (!restingWeapon && col >= WEAPON_COLUMN[who]) continue;
             Color c=switch(art[row].charAt(col)) {
                 case 'O' -> ink;
                 case 'E' -> blink && row+1<art.length && art[row+1].charAt(col)=='E' ? skin : ink;

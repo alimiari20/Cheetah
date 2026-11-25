@@ -110,9 +110,20 @@ public final class GameFrame extends JFrame {
         setGlassPane(pauseOverlay);
         buildMenu();
     }
+    public void openCaptureLab(GameEngine engine) {
+        setTitle("Cheetah Ludo — Capture Lab");
+        setJMenuBar(null);
+        setContentPane(new CaptureLab(engine, boardPanel));
+        setVisible(true);
+    }
+    @Override public void dispose() {
+        boardPanel.cancelCapture();
+        clock.stop();
+        super.dispose();
+    }
     public void setActions(Actions a){actions=Objects.requireNonNull(a);}
     public boolean isGameVisible(){return "GAME".equals(currentScreen);}
-    private void show(String key){if(!"GAME".equals(key)){clock.stop();if(paused)setPaused(false);}currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();}
+    private void show(String key){if(!"GAME".equals(key)){boardPanel.cancelCapture();clock.stop();if(paused)setPaused(false);}currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();}
     public void showMainMenu(){show(adminMode ? "DASHBOARD" : "MENU");}
     public void showSetup(){setupPage.setPreviewProvider((diff,colors)->actions.preview(diff,colors));show("SETUP");}
     public void showGame(){show("GAME");}
@@ -356,10 +367,10 @@ public final class GameFrame extends JFrame {
         if(!t.startsWith("<html>")) label.setText("<html><p style='width:"+width+"px' align=center>"+t+"</p></html>");
     }
     /** Pauses or resumes the game: the overlay blocks the screen and the clock stops counting. */
-    public void playCapture(Piece attacker, List<Piece> victims){
+    public boolean playCapture(CaptureMove move){
         boolean rollEnabled=rollButton.isEnabled(),passEnabled=passButton.isEnabled();
         rollButton.setEnabled(false);passButton.setEnabled(false);
-        try{boardPanel.playCapture(attacker,victims);}
+        try{return boardPanel.playCapture(move, 1.0);}
         finally{rollButton.setEnabled(rollEnabled);passButton.setEnabled(passEnabled);}
     }
     public boolean isCapturePlaying(){return boardPanel.isCapturePlaying();}
@@ -543,7 +554,7 @@ public final class GameFrame extends JFrame {
         JMenuItem exp=new JMenuItem("Export History");exp.addActionListener(e->{if(actions!=null)actions.exportHistory();});game.add(exp);
         JMenuItem exit=new JMenuItem("Exit");exit.addActionListener(e->dispose());game.add(exit);
         JMenu help=new JMenu("Help");JMenuItem rules=new JMenuItem("Rules & Controls");
-        rules.addActionListener(e -> showRules());
+        rules.addActionListener(e -> { if (!isCapturePlaying()) showRules(); });
         help.add(rules);b.add(game);b.add(help);setJMenuBar(b);
     }
 

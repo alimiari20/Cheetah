@@ -50,6 +50,10 @@ public final class Main {
             try {
                 GameFrame frame = new GameFrame();
                 GameEngine engine = new GameEngine(new BoardRepository());
+                if (args.length == 1 && "--capture-lab".equals(args[0])) {
+                    frame.openCaptureLab(engine);
+                    return;
+                }
                 GameController controller = new GameController(
                         frame, engine, new HistoryRepository(), new Random());
 

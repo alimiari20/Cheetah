@@ -1,22 +1,20 @@
-# Character capture animations
+# On-board captures
 
-All four original pixel-art heroes retain their existing artwork and player colour. Knight: sword arc; Wizard: magic orb; Archer: arrow; Lancer: spear thrust. Captured heroes shake, rise and fade before appearing in their castle. Each capture sequence runs for 1,050 ms on a Swing timer. No external animation assets or JavaFX are required.
+Combat plays on the live board for 1.6 seconds. The knight lunges and swings a silver blade, the wizard casts an orb, the archer draws and releases an arrow, and the lancer charges with an extended spear. Each defender returns to its own castle position. The current board scale applies throughout playback, including when the window is resized.
 
-The controller compares opponent positions before and after model operations. Only a confirmed capture at the attacking hero's landing square triggers the effect. Regular moves, question shifts and surprise shifts are covered. The board temporarily hides the actual captured pieces and attacker while painting the effect; it does not modify model state. Roll, pass, board selection, pause and navigation are guarded during the animation. Special-square processing and completion continue once the effect ends.
+## Developer capture lab
 
-## Eclipse
-1. Back up your current branch or commit your changes.
-2. Copy the changed files into the corresponding paths in your existing project (or import the full project as an existing Eclipse project).
-3. Project > Clean; run `src/com/cheetahludo/Main.java` as a Java Application with Java 17 or later.
-4. Start a match, capture an opponent with each of the four heroes, and check that the opponent returns to the castle and the next action works. Protected squares and blocked/non-capture moves should not show an attack.
+Run the application with `--capture-lab`. In Eclipse, add this flag under **Run Configurations → Arguments → Program arguments** for `com.cheetahludo.Main`. With the packaged game, run:
 
-## Changed files
-- `src/view/CaptureAnimation.java` (new)
-- `src/view/BoardPanel.java`
-- `src/view/GameFrame.java`
-- `src/controller/GameController.java`
-- `test/view/CaptureAnimationTests.java` (new)
-- `build.xml` (registers animation tests)
+```sh
+java -jar dist/CheetahLudo.jar --capture-lab
+```
 
-## Verification
-`ant clean jar` passed: 105 existing tests plus a new animation test covering 16 hero/colour combinations, 80 rendered frames and the timer lifecycle. Manual interactive gameplay on macOS/Windows has not been verified.
+Choose the two heroes, their colors, the board, one of eight directions, and normal, half or quarter speed. **Play capture** stages a match on a shared, unprotected track square and uses the game engine to resolve a move. **Replay capture** repeats the setup. The controls and throwaway match exist only in this launch mode.
+
+## Implementation
+
+- `CaptureMove` compares opponent positions around one engine operation. It records a visual event only for opponents returned to their castles from the attacker's landing square. The approach follows the attacker's actual path indices, including backward movement.
+- `CapturePlayback` owns one coalescing Swing timer and measures progress with a monotonic clock. Its secondary event loop dispatches input and paint events while the controller waits to resolve any chained effects. Leaving the board cancels the pending continuation.
+- `BoardPanel` suppresses the participants' static sprites during playback. `CaptureAnimation` projects board coordinates into the current layout, including the same castle positions used for resting heroes. `CharacterAttackRenderer` draws weapons and effects procedurally. The transparent sprite cache is bounded by four colors, four heroes and two poses.
+- `mvn test` runs the JUnit and standalone suites. `ant clean jar` runs the standalone suites and rebuilds the desktop JAR.

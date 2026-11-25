@@ -178,9 +178,9 @@ view.setOpponentSelectionIds(Set.of());
 
     public void newGame() {
 
-    	if (view.isCapturePlaying() || resolvingDialog || selectingOpponentPiece) {
-    	    return;
-    	}
+        if (resolvingDialog || selectingOpponentPiece) {
+            return;
+        }
 
         if (view.isGameVisible()
 
@@ -286,7 +286,7 @@ view.setOpponentSelectionIds(Set.of());
 
     public void showMenu() {
 
-        if (view.isCapturePlaying() || resolvingDialog) {
+        if (resolvingDialog) {
 
             return;
 
@@ -688,12 +688,12 @@ if (selectingOpponentPiece) {
 
         tryAction(() -> {
 
-            Map<Piece,String> before = captureSnapshot(pieceId);
+            CaptureMove.Before before = CaptureMove.observe(session, pieceId);
             GameEngine.MoveFeedback move =
 
                 engine.move(session, pieceId);
 
-            refreshCapture(pieceId,before);
+            refreshCapture(before);
 
 
             resolveSpecial(pieceId, move.squareId());
@@ -736,7 +736,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
     OpponentBackwardCommand command =
         new OpponentBackwardCommand(engine, session, opponent, die);
 
-    Map<Piece,String> before = captureSnapshot(opponentPieceId);
+    CaptureMove.Before before = CaptureMove.observe(session, opponentPieceId);
     command.execute();
 
     GameEngine.MoveFeedback result = command.getResult();
@@ -748,7 +748,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
     pendingSurprisePieceId = null;
     view.setOpponentSelectionIds(Set.of());
 
-    refreshCapture(opponentPieceId,before);
+    refreshCapture(before);
 
     resolvingDialog = true;
     try {
@@ -886,7 +886,7 @@ private void resolveSpecial(
 
             }
 
-            Map<Piece,String> before = captureSnapshot(pieceId);
+            CaptureMove.Before before = CaptureMove.observe(session, pieceId);
             if (piece.color() != session.current().color()) {
                 engine.resolveOpponentQuestion(
                     session,
@@ -903,7 +903,7 @@ private void resolveSpecial(
                 );
             }
 
-            refreshCapture(pieceId,before);
+            refreshCapture(before);
 
             Piece updated = session.findPiece(pieceId);
             if (updated != null
@@ -940,11 +940,11 @@ private void resolveSpecial(
         return;
     }
 
-    Map<Piece,String> before = captureSnapshot(pieceId);
+    CaptureMove.Before before = CaptureMove.observe(session, pieceId);
     GameEngine.SurpriseFeedback feedback =
             engine.applySurprise(session, pieceId, outcome, random);
 
-    refreshCapture(pieceId,before);
+    refreshCapture(before);
 
     resolvingDialog = true;
     try {
@@ -1122,24 +1122,14 @@ private void resolveSpecial(
 
     }
 
-    /** Detect actual model-confirmed captures, never predict or alter game rules. */
-    private Map<Piece,String> captureSnapshot(String attackerId) {
-        Map<Piece,String> before=new LinkedHashMap<>();
-        Piece attacker=session.findPiece(attackerId);
-        for(Player p:session.players()) for(Piece piece:p.pieces())
-            if(piece.color()!=attacker.color() && (piece.state()==Piece.State.TRACK || piece.state()==Piece.State.HOME))
-                before.put(piece,piece.squareId(session.board()));
-        return before;
-    }
-    private void refreshCapture(String attackerId, Map<Piece,String> before) {
-        Piece attacker=session.findPiece(attackerId);
-        List<Piece> victims=new ArrayList<>();
-        if(attacker.state()==Piece.State.TRACK || attacker.state()==Piece.State.HOME)
-            for(Map.Entry<Piece,String> entry:before.entrySet())
-                if(entry.getKey().state()==Piece.State.CASTLE && entry.getValue().equals(attacker.squareId(session.board()))) victims.add(entry.getKey());
+    private void refreshCapture(CaptureMove.Before before) {
+        CaptureMove capture = before.resolved();
         refresh();
-        if(!victims.isEmpty()) view.playCapture(attacker,victims);
+        if (capture != null && !view.playCapture(capture)) {
+            throw new java.util.concurrent.CancellationException();
+        }
     }
+
     private void refresh() {
 
         view.render(session);
@@ -1152,6 +1142,8 @@ private void resolveSpecial(
 
             action.run();
 
+        } catch (java.util.concurrent.CancellationException abandonedMatch) {
+            // Leaving the board cancels the rest of this move, including chained dialogs.
         } catch (RuntimeException ex) {
 
             ex.printStackTrace();
