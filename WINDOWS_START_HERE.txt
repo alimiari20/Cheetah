@@ -3,14 +3,14 @@ CHEETAH LUDO: WINDOWS 10 / WINDOWS 11
 
 METHOD A - PLAY NOW WITH JAVA 17+ INSTALLED
 1. Extract this ZIP file fully (do not run it from inside the ZIP).
-2. Open CheetahLudoEclipse folder in File Explorer.
+2. Open the project folder in File Explorer.
 3. Double-click RUN_ON_WINDOWS.bat
 4. The program checks Java/resources, then opens a separate Swing game window.
 
 METHOD B - RUN/EDIT IN ECLIPSE IDE
 1. Install JDK 17+ and Eclipse IDE for Java Developers.
 2. File > Import > General > Existing Projects into Workspace.
-3. Select the CheetahLudoEclipse folder (containing .project).
+3. Select the folder containing .project.
 4. Open src/com/cheetahludo/Main.java > Run As > Java Application.
    Or right-click CheetahLudo-Game.launch and run it.
    NOTE: CheetahLudo-Check.launch ONLY prints diagnostics; it does not show a game.

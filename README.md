@@ -8,10 +8,10 @@ This is a **native Swing GUI**. It is not React, JavaFX, a browser page, or a st
 
 ### Eclipse (Windows or Mac)
 
-1. Unzip the archive fully; keep the complete `CheetahLudoPrototypeGUI` folder together. If you imported an older version previously, **do not click its Run button**; select the new `Main.java` file and run that instead.
+1. Extract the complete project folder. If you imported an older version previously, **do not click its Run button**; select the new `Main.java` file and run that instead.
 2. Open **Eclipse IDE for Java Developers**.
 3. **File → Import → General → Existing Projects into Workspace**.
-4. Select the extracted **`CheetahLudoPrototypeGUI`** project folder → Finish. This version uses a NEW project name so it can be imported alongside the old one.
+4. Select the folder containing `.project`, choose **Cheetah**, and click **Finish**.
 5. Make sure **Project → Build Automatically** is checked and Eclipse has JDK 17 or newer.
 6. Open `src/com/cheetahludo/Main.java`, right-click → **Run As → Java Application**.
 7. The **CHEETAH LUDO** graphical main menu appears in a **separate desktop window**.
@@ -20,7 +20,7 @@ This is a **native Swing GUI**. It is not React, JavaFX, a browser page, or a st
 
 ### Windows (without Eclipse)
 
-- Extract the ZIP, open `CheetahLudoPrototypeGUI`, double-click `RUN_ON_WINDOWS.bat`.
+- Extract the ZIP, open the project folder, double-click `RUN_ON_WINDOWS.bat`.
 - Java 17+ must be installed unless you build the self-contained Windows app.
 - For a bundled Java runtime, run `BUILD_WINDOWS_APP.bat` **on a Windows computer with a full JDK**. This uses `jpackage` to produce `release/CheetahLudo/CheetahLudo.exe` together with its runtime. Copy the **whole folder**; the `.exe` by itself is not portable.
 
@@ -124,7 +124,7 @@ With Apache Ant installed:
 ant clean jar
 ```
 
-This compiles the project, runs **47 automated tests** (34 engine, 4 color assignment, 9 persistence/history), then rebuilds `dist/CheetahLudo.jar` with all board and question data.
+Ant runs the eight standalone test programs and rebuilds `dist/CheetahLudo.jar` with the board and question data. To run both the JUnit board-generation tests and the standalone tests, use `mvn test`.
 
 ```bash
 ant run

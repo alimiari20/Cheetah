@@ -30,6 +30,26 @@
         <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
         <version>3.5.2</version><configuration><useModulePath>false</useModulePath></configuration>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>standalone-test-suites</id>
+            <phase>test</phase>
+            <goals><goal>run</goal></goals>
+            <configuration>
+              <skip>${skipTests}</skip>
+              <target xmlns:unless="ant:unless">
+                <ant antfile="build.xml" target="test" inheritAll="false" unless:true="${maven.test.skip}">
+                  <property name="build.dir" location="${project.build.directory}/ant-test-classes"/>
+                </ant>
+              </target>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>
