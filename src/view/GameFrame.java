@@ -7,6 +7,7 @@ import javax.swing.*;
 import javax.swing.border.*;
 
 import model.*;
+import security.AdminAudit;
 import java.util.Set;
 import java.awt.*;
 import java.awt.event.*;
@@ -19,6 +20,7 @@ public final class GameFrame extends JFrame {
     public interface Actions {
         void openAdminDashboard();
         void showAdminSecurity();
+        void showSecurityDashboard();
     	void logoutAdmin();
         void newGame();
         void startConfiguredGame(SetupDialog.Config config);
@@ -38,6 +40,7 @@ public final class GameFrame extends JFrame {
     private final CardLayout screenLayout=new CardLayout();
     private final JPanel screens=new JPanel(screenLayout);
     private final GlobalHeader header=new GlobalHeader();
+    private final SecurityDashboardPage securityDashboard = new SecurityDashboardPage(this::showMainMenu);
     private final SetupPage setupPage;
     private final HistoryPage historyPage;
     private final QuestionAdminPage adminPage;
@@ -94,8 +97,9 @@ public final class GameFrame extends JFrame {
         dashboard = new AdminDashboardPage(
                 () -> actions.logoutAdmin(), () -> actions.questionAdmin(),
                 () -> actions.history(), () -> actions.editAdminAccount(),
-                () -> actions.showAdminSecurity());
+                () -> actions.showAdminSecurity(), () -> actions.showSecurityDashboard());
         screens.add(dashboard, "DASHBOARD");
+        screens.add(securityDashboard, "SECURITY");
         setupPage=new SetupPage(()->{if(actions!=null)actions.showMenu();},config->{if(actions!=null)actions.startConfiguredGame(config);});
         screens.add(setupPage,"SETUP");
         screens.add(buildGameScreen(),"GAME");
@@ -646,7 +650,10 @@ public final class GameFrame extends JFrame {
         adminMode = enabled;
         Messages.set(homeMenuItem,enabled ? "Admin Dashboard" : "Main Menu");
         newGameMenuItem.setEnabled(!enabled);
-        if (!enabled) dashboard.setEmail(null);
+        if (!enabled) {
+            dashboard.setEmail(null);
+            securityDashboard.clear();
+        }
         showMainMenu();
     }
 
@@ -656,5 +663,11 @@ public final class GameFrame extends JFrame {
 
     public void showAdminSecurity(int attempts, long minutes) {
         AdminAccountDialog.showSecurity(this, attempts, minutes);
+    }
+
+    public void showSecurityDashboard(AdminAudit.Snapshot snapshot) {
+        if (!adminMode) return;
+        securityDashboard.setSnapshot(snapshot);
+        show("SECURITY");
     }
 }

@@ -91,6 +91,9 @@
                 <pathelement location="${build.dir}"/>
             </classpath>
         </java>
+        <java classname="security.AdminAuditTests" fork="true" failonerror="true">
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
     </target>
 
     <target name="jar" depends="test">

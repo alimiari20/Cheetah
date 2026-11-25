@@ -8,6 +8,7 @@ import javax.swing.*;
 
 import model.*;
 import security.AdminAuthService;
+import security.AdminAudit;
 import view.AdminAccountDialog;
 import security.AdminEmailRepository;
 import security.AdminAuthService.Factor;
@@ -43,6 +44,7 @@ public final class GameController
         new QuestionRepository();
     private final AdminSession adminSession = new AdminSession();
     private final AdminAuthService adminAuthService = new AdminAuthService();
+    private final AdminAudit adminAudit = new AdminAudit();
     private final AdminEmailRepository adminEmailRepository =
             new AdminEmailRepository();
     private QuestionBank questions;
@@ -351,27 +353,30 @@ view.setOpponentSelectionIds(Set.of());
                 return false;
             }
 
-            boolean passwordAccepted = verifyAdminFactor(view, Factor.PASSWORD);
-            return adminSession.signIn(passwordAccepted, () -> {
+            boolean passwordAccepted = verifyAdminFactor(view, Factor.PASSWORD, true);
+            boolean signedIn = adminSession.signIn(passwordAccepted, () -> {
                 try {
                     if (adminAuthService.codeVersion() == null) {
                         // Existing password-only installations enroll after proving the saved password.
                         return changeAdminCode(view, null, false);
                     }
-                    return verifyAdminFactor(view, Factor.CODE);
+                    return verifyAdminFactor(view, Factor.CODE, true);
                 } catch (IOException ex) {
                     throw new UncheckedIOException(ex);
                 }
             });
+            if (signedIn) adminAudit.signedIn();
+            return signedIn;
         } catch (IOException | RuntimeException ex) {
             view.showError(ex);
             return false;
         }
     }
 
-    private boolean verifyAdminFactor(Component parent, Factor factor) throws IOException {
+    private boolean verifyAdminFactor(Component parent, Factor factor, boolean login) throws IOException {
         var attempts = adminAuthService.attempts(factor);
         if (attempts.lockedSeconds() > 0) {
+            adminAudit.blocked(factor);
             Dialogs.showMessageDialog(parent,
                     "Administrator authentication is locked. Try again in "
                             + attempts.lockedSeconds() + " seconds.",
@@ -386,7 +391,7 @@ view.setOpponentSelectionIds(Set.of());
                 code ? "code" : "password",
                 value -> {
                     try {
-                        return adminAuthService.verify(factor, value);
+                        return adminAudit.verify(adminAuthService, factor, value, login);
                     } catch (IOException ex) {
                         throw new UncheckedIOException(ex);
                     }
@@ -440,6 +445,17 @@ view.setOpponentSelectionIds(Set.of());
         tryAction(() -> {
             requireAdmin();
             view.showAdminSecurity(AdminAuthService.MAX_ATTEMPTS, AdminAuthService.LOCKOUT_MINUTES);
+        });
+    }
+
+    @Override
+    public void showSecurityDashboard() {
+        tryAction(() -> {
+            try {
+                view.showSecurityDashboard(adminAudit.read(adminSession));
+            } catch (IOException ex) {
+                view.showInfo("Security Dashboard", "Security activity could not be read.");
+            }
         });
     }
 
@@ -1195,8 +1211,8 @@ private void resolveSpecial(
         try {
             requireAdmin();
             byte[] version = adminAuthService.codeVersion();
-            if (!verifyAdminFactor(parent, Factor.PASSWORD)
-                    || (version != null && !verifyAdminFactor(parent, Factor.CODE))) {
+            if (!verifyAdminFactor(parent, Factor.PASSWORD, false)
+                    || (version != null && !verifyAdminFactor(parent, Factor.CODE, false))) {
                 return false;
             }
             requireAdmin();
