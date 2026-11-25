@@ -15,10 +15,14 @@ import java.util.Objects;
 /** Prototype-inspired desktop shell: real menu/setup/game/history/admin screens. */
 public final class GameFrame extends JFrame {
     public interface Actions {
+        void openAdminDashboard();
+        void showAdminSecurity();
+    	void logoutAdmin();
         void newGame();
         void startConfiguredGame(SetupDialog.Config config);
         GameSession preview(Difficulty difficulty,List<PlayerColor> colors);
         void showMenu();
+        void editAdminAccount();
         void roll();
         void pass();
         void selectPiece(String id);
@@ -67,20 +71,27 @@ public final class GameFrame extends JFrame {
     	    Theme.label("BOOST DIE", 11, Font.BOLD, Theme.MUTED);
     /** Move history: one short, coloured line per event, newest first, grouped by turn. */
     private final JPanel history=new JPanel();
-    private final JButton adminSwitch=Theme.button("GUEST MODE  ▾",false);
-    private final JButton adminTools=Theme.button("QUESTION MANAGEMENT",false);
-    private final JLabel adminStatus=Theme.label("Guest view  •  Local multiplayer",11,Font.PLAIN,Theme.MUTED);
+    private final AdminDashboardPage dashboard;
+    private JMenuItem homeMenuItem;
+    private JMenuItem newGameMenuItem;
     private boolean adminMode;
     private String currentScreen="MENU";
 
     public GameFrame(){
-        super("CHEETAH LUDO  •  Desktop MVC");
+        super("Cheetah Ludo");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         Rectangle r=GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         setSize(Math.min(1390,r.width),Math.min(910,r.height));
         setMinimumSize(new Dimension(Math.min(890,r.width),Math.min(670,r.height)));
         setLocationRelativeTo(null);
-        screens.add(buildMainMenu(),"MENU");
+        screens.add(new PlayerMenuPage(
+                () -> actions.newGame(), () -> actions.history(),
+                () -> actions.openAdminDashboard(), this::showRules, this::confirmExit), "MENU");
+        dashboard = new AdminDashboardPage(
+                () -> actions.logoutAdmin(), () -> actions.questionAdmin(),
+                () -> actions.history(), () -> actions.editAdminAccount(),
+                () -> actions.showAdminSecurity());
+        screens.add(dashboard, "DASHBOARD");
         setupPage=new SetupPage(()->{if(actions!=null)actions.showMenu();},config->{if(actions!=null)actions.startConfiguredGame(config);});
         screens.add(setupPage,"SETUP");
         screens.add(buildGameScreen(),"GAME");
@@ -102,58 +113,16 @@ public final class GameFrame extends JFrame {
     public void setActions(Actions a){actions=Objects.requireNonNull(a);}
     public boolean isGameVisible(){return "GAME".equals(currentScreen);}
     private void show(String key){if(!"GAME".equals(key)){clock.stop();if(paused)setPaused(false);}currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();}
-    public void showMainMenu(){show("MENU");}
+    public void showMainMenu(){show(adminMode ? "DASHBOARD" : "MENU");}
     public void showSetup(){setupPage.setPreviewProvider((diff,colors)->actions.preview(diff,colors));show("SETUP");}
     public void showGame(){show("GAME");}
     public void showHistory(List<HistoryRepository.Entry> entries){historyPage.setEntries(entries);show("HISTORY");}
     public void showQuestionAdmin(List<Question> questions){adminPage.showQuestions(questions);show("ADMIN");}
     public void updateQuestionAdmin(List<Question> questions){adminPage.showQuestions(questions);}
 
-    private JPanel buildMainMenu(){
-        UiKit.GradientPage page=new UiKit.GradientPage(new BorderLayout(18,0));
-        page.setBorder(new EmptyBorder(26,33,23,33));
-        JPanel top=UiKit.transparent(new BorderLayout());
-        JPanel account=UiKit.transparent(new GridLayout(2,1,0,8));account.setPreferredSize(new Dimension(254,112));
-        adminSwitch.addActionListener(e->{adminMode=!adminMode;adminSwitch.setText(adminMode?"ADMINISTRATOR  ▴":"GUEST MODE  ▾");
-            adminStatus.setText(adminMode?"Local administrator tools enabled":"Guest view  •  Local multiplayer");
-            adminTools.setVisible(adminMode);});
-        account.add(adminSwitch);account.add(adminStatus);top.add(account,BorderLayout.WEST);
-        JPanel corner=UiKit.transparent(new BorderLayout());
-        JLabel local=UiKit.chip("LOCAL MULTIPLAYER  •  2–4 PLAYERS",Theme.MUTED);corner.add(local,BorderLayout.NORTH);
-        top.add(corner,BorderLayout.EAST);page.add(top,BorderLayout.NORTH);
-        JPanel center=UiKit.transparent(new GridBagLayout());
-        JPanel stack=UiKit.transparent();stack.setLayout(new BoxLayout(stack,BoxLayout.Y_AXIS));
-        UiKit.Brand brand=new UiKit.Brand();brand.setPreferredSize(new Dimension(410,155));brand.setAlignmentX(Component.CENTER_ALIGNMENT);
-        stack.add(brand);stack.add(Box.createVerticalStrut(18));
-        // menu buttons stacked with equal gaps; a hidden button (question management for guests) leaves no hole
-        JPanel panel=new UiKit.GlassCard(null);panel.setLayout(new BoxLayout(panel,BoxLayout.Y_AXIS));
-        panel.setBorder(new EmptyBorder(16,16,16,16));
-        JButton play=Theme.button("▶   NEW GAME",true);play.addActionListener(e->{if(actions!=null)actions.newGame();});
-        JButton history=Theme.button("↺   GAME HISTORY",false);history.addActionListener(e->{if(actions!=null)actions.history();});
-        adminTools.addActionListener(e->{if(actions!=null)actions.questionAdmin();});adminTools.setVisible(false);
-        JButton exit=Theme.button("EXIT",false);exit.addActionListener(e->{
-            if(UiKit.confirm(this,"Exit","EXIT CHEETAH LUDO?","Are you sure you want to close the game?","EXIT GAME"))dispose();});
-        JButton[] buttons={play,history,adminTools,exit};
-        for(int i=0;i<buttons.length;i++){
-            JButton b=buttons[i];
-            b.setAlignmentX(Component.CENTER_ALIGNMENT);
-            b.setPreferredSize(new Dimension(333,52));b.setMaximumSize(new Dimension(333,52));
-            if(i>0){Component gap=Box.createVerticalStrut(10);panel.add(gap);
-                if(b==adminTools){final Component g=gap;g.setVisible(false);                      // the gap shows and hides with the button
-                    adminSwitch.addActionListener(ev->SwingUtilities.invokeLater(()->{g.setVisible(adminTools.isVisible());panel.revalidate();}));}}
-            panel.add(b);
-        }
-        panel.setMaximumSize(new Dimension(365,400));panel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        // the four heroes stand on both sides of the menu
-        JPanel row=UiKit.transparent(new BorderLayout(26,0));
-        row.add(new HeroPair(0,PlayerColor.RED,1,PlayerColor.GREEN),BorderLayout.WEST);
-        JPanel panelHolder=UiKit.transparent(new GridBagLayout());panelHolder.add(panel);   // keeps the card as tall as its buttons
-        row.add(panelHolder,BorderLayout.CENTER);
-        row.add(new HeroPair(2,PlayerColor.YELLOW,3,PlayerColor.BLUE),BorderLayout.EAST);
-        row.setAlignmentX(Component.CENTER_ALIGNMENT);
-        stack.add(row);center.add(stack);page.add(center,BorderLayout.CENTER);
-        JLabel bottom=UiKit.sub("Cheetah Ludo  •  Local Multiplayer  •  Java Swing MVC  •  Windows & macOS");
-        page.add(bottom,BorderLayout.SOUTH);return page;
+    private void confirmExit() {
+        if (UiKit.confirm(this, "Exit", "EXIT CHEETAH LUDO?",
+                "Are you sure you want to close the game?", "EXIT GAME")) dispose();
     }
     private JPanel buildGameScreen(){
         UiKit.GradientPage root=new UiKit.GradientPage(new BorderLayout(10,6));
@@ -317,21 +286,6 @@ public final class GameFrame extends JFrame {
     private static String hero(String number){int n=Integer.parseInt(number)-1;return n>=0&&n<HERO_NAMES.length?HERO_NAMES[n]:"piece "+number;}
     private static String esc(String t){return t.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");}
     private static String hex(Color c){return String.format("#%02x%02x%02x",c.getRed(),c.getGreen(),c.getBlue());}
-    /** Two big pixel heroes for the main menu, one a little higher than the other. */
-    private static final class HeroPair extends JComponent {
-        private final int first,second; private final PlayerColor firstColor,secondColor;
-        HeroPair(int first,PlayerColor firstColor,int second,PlayerColor secondColor){
-            this.first=first;this.second=second;this.firstColor=firstColor;this.secondColor=secondColor;
-            setPreferredSize(new Dimension(200,250));
-        }
-        @Override protected void paintComponent(Graphics g){
-            Graphics2D d=(Graphics2D)g.create();
-            int w=getWidth(),h=getHeight();
-            BoardPanel.paintHero(d,first,Theme.player(firstColor),w*.3,h*.42,104,false);
-            BoardPanel.paintHero(d,second,Theme.player(secondColor),w*.7,h*.62,104,false);
-            d.dispose();
-        }
-    }
     /** Pause symbol: two white rounded bars. */
     private static final class PauseIcon implements Icon {
         public int getIconWidth(){return 18;} public int getIconHeight(){return 20;}
@@ -575,22 +529,32 @@ public final class GameFrame extends JFrame {
     public void showError(Exception ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"CHEETAH LUDO  •  ERROR",JOptionPane.ERROR_MESSAGE);}
     private void buildMenu(){
         JMenuBar b=new JMenuBar();JMenu game=new JMenu("Game");
-        JMenuItem main=new JMenuItem("Main Menu");main.addActionListener(e->{if(actions!=null)actions.showMenu();});game.add(main);
-        JMenuItem newGame=new JMenuItem("New Game");newGame.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N,Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
-        newGame.addActionListener(e->{if(actions!=null)actions.newGame();});game.add(newGame);
+        homeMenuItem = new JMenuItem("Main Menu");
+        homeMenuItem.addActionListener(e -> { if (actions != null) actions.showMenu(); });
+        game.add(homeMenuItem);
+        newGameMenuItem = new JMenuItem("New Game");
+        newGameMenuItem.setAccelerator(KeyStroke.getKeyStroke(
+                KeyEvent.VK_N, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
+        newGameMenuItem.addActionListener(e -> {
+            if (actions != null && !adminMode) actions.newGame();
+        });
+        game.add(newGameMenuItem);
         JMenuItem hist=new JMenuItem("History");hist.addActionListener(e->{if(actions!=null)actions.history();});game.add(hist);
         JMenuItem exp=new JMenuItem("Export History");exp.addActionListener(e->{if(actions!=null)actions.exportHistory();});game.add(exp);
-        JMenuItem admin=new JMenuItem("Question Administration");admin.addActionListener(e->{if(actions!=null)actions.questionAdmin();});game.add(admin);
         JMenuItem exit=new JMenuItem("Exit");exit.addActionListener(e->dispose());game.add(exit);
         JMenu help=new JMenu("Help");JMenuItem rules=new JMenuItem("Rules & Controls");
-        rules.addActionListener(e->showInfo("HOW TO PLAY",
+        rules.addActionListener(e -> showRules());
+        help.add(rules);b.add(game);b.add(help);setJMenuBar(b);
+    }
+
+    private void showRules() {
+        showInfo("HOW TO PLAY",
           "Roll 6 to bring a piece out of its castle. A six grants an extra roll, but three consecutive sixes end the turn.\n\n"+
           "Click one highlighted piece to move. You need an exact roll to reach Home.\n\n"+
           "Medium: regular die × (boost − 1). Hard: regular die × (UltraBoost − 1).\n\n"+
           "Protected star squares prevent captures. Double blocks stop opponent pieces from passing.\n\n"+
           "Question squares ask a question and move you forward/backward. Surprise squares have random effects.\n\n"+
-          "Win by getting all four pieces Home. Keyboard: R rolls dice, P passes when permitted."));
-        help.add(rules);b.add(game);b.add(help);setJMenuBar(b);
+          "Win by getting all four pieces Home. Keyboard: R rolls dice, P passes when permitted.");
     }
     private void bindShortcut(int key,String id,Runnable action){
         getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(key,0),id);
@@ -615,5 +579,22 @@ public final class GameFrame extends JFrame {
     }
     public void setOpponentSelectionIds(Set<String> ids) {
         boardPanel.setOpponentSelectionIds(ids);
+    }
+
+
+    public void setAdminMode(boolean enabled) {
+        adminMode = enabled;
+        homeMenuItem.setText(enabled ? "Admin Dashboard" : "Main Menu");
+        newGameMenuItem.setEnabled(!enabled);
+        if (!enabled) dashboard.setEmail(null);
+        showMainMenu();
+    }
+
+    public void showAdminEmail(String email) {
+        dashboard.setEmail(email);
+    }
+
+    public void showAdminSecurity(int attempts, long minutes) {
+        AdminAccountDialog.showSecurity(this, attempts, minutes);
     }
 }

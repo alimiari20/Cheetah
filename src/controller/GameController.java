@@ -5,8 +5,14 @@ import view.*;
 import javax.swing.*;
 
 import model.*;
-
+import security.AdminAuthService;
+import view.AdminAccountDialog;
+import security.AdminEmailRepository;
+import security.AdminAuthService.Factor;
+import security.AdminSession;
+import java.awt.Component;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 
 import java.nio.file.*;
 
@@ -33,7 +39,10 @@ public final class GameController
     private final QuestionRepository questionRepository =
 
         new QuestionRepository();
-
+    private final AdminSession adminSession = new AdminSession();
+    private final AdminAuthService adminAuthService = new AdminAuthService();
+    private final AdminEmailRepository adminEmailRepository =
+            new AdminEmailRepository();
     private QuestionBank questions;
 
     private GameSession session;
@@ -298,7 +307,7 @@ view.setOpponentSelectionIds(Set.of());
             return;
 
         }
-
+        
         view.showMainMenu();
 
     }
@@ -323,12 +332,126 @@ view.setOpponentSelectionIds(Set.of());
 
     }
 
-    @Override
 
+
+
+
+
+
+
+    private boolean loginAdmin() {
+        try {
+            if (!adminAuthService.isProvisioned()) {
+                JOptionPane.showMessageDialog(view,
+                        "No local administrator account exists. Run the following command in a terminal:\n"
+                                + "java -jar CheetahLudo.jar --setup-admin",
+                        "Admin Setup", JOptionPane.INFORMATION_MESSAGE);
+                return false;
+            }
+
+            boolean passwordAccepted = verifyAdminFactor(view, Factor.PASSWORD);
+            return adminSession.signIn(passwordAccepted, () -> {
+                try {
+                    if (adminAuthService.codeVersion() == null) {
+                        // Existing password-only installations enroll after proving the saved password.
+                        return changeAdminCode(view, null, false);
+                    }
+                    return verifyAdminFactor(view, Factor.CODE);
+                } catch (IOException ex) {
+                    throw new UncheckedIOException(ex);
+                }
+            });
+        } catch (IOException | RuntimeException ex) {
+            view.showError(ex);
+            return false;
+        }
+    }
+
+    private boolean verifyAdminFactor(Component parent, Factor factor) throws IOException {
+        var attempts = adminAuthService.attempts(factor);
+        if (attempts.lockedSeconds() > 0) {
+            JOptionPane.showMessageDialog(parent,
+                    "Administrator authentication is locked. Try again in "
+                            + attempts.lockedSeconds() + " seconds.",
+                    "Admin Account Locked", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+
+        boolean code = factor == Factor.CODE;
+        return AdminLoginDialog.showLogin(parent,
+                code ? "Authentication Code" : "Admin Login",
+                code ? "Authentication Code" : "Administrator password",
+                code ? "code" : "password",
+                value -> {
+                    try {
+                        return adminAuthService.verify(factor, value);
+                    } catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                    }
+                }, attempts.remaining(), AdminAuthService.LOCKOUT_MINUTES);
+    }
+
+    private boolean changeAdminCode(Component parent, byte[] version, boolean generate) throws IOException {
+        char[] code = generate ? adminAuthService.generateCode()
+                : AdminLoginDialog.askNewCode(parent, version == null);
+        if (code == null) {
+            return false;
+        }
+
+        try {
+            adminAuthService.replaceCode(version, code);
+            if (generate) {
+                AdminAccountDialog.showGeneratedCode(parent, code);
+            }
+            return true;
+        } finally {
+            Arrays.fill(code, '\0');
+        }
+    }
+
+    @Override
+    public void logoutAdmin() {
+        adminSession.logout();
+        view.setAdminMode(false);
+    }
+
+    @Override
+    public void openAdminDashboard() {
+        if (!adminSession.isAuthenticated() && !loginAdmin()) {
+            return;
+        }
+        view.setAdminMode(true);
+        view.showAdminEmail(loadAdminProfileEmail());
+    }
+
+    private String loadAdminProfileEmail() {
+        try {
+            return adminEmailRepository.loadOrInitialize();
+        } catch (IOException ex) {
+            view.showError(ex);
+            return "";
+        }
+    }
+
+    @Override
+    public void showAdminSecurity() {
+        tryAction(() -> {
+            requireAdmin();
+            view.showAdminSecurity(AdminAuthService.MAX_ATTEMPTS, AdminAuthService.LOCKOUT_MINUTES);
+        });
+    }
+
+    private void requireAdmin() {
+        adminSession.requireAuthenticated();
+    }
+
+
+    @Override
     public void questionAdmin() {
         if(view.isCapturePlaying()) return;
 
         tryAction(() -> {
+            requireAdmin();
 
             try {
 
@@ -359,6 +482,7 @@ view.setOpponentSelectionIds(Set.of());
     public void saveQuestion(Question question) {
 
         tryAction(() -> {
+        	 requireAdmin();
 
             try {
 
@@ -427,10 +551,11 @@ view.setOpponentSelectionIds(Set.of());
     }
 
     @Override
-
     public void deleteQuestion(String questionId) {
-
         tryAction(() -> {
+            requireAdmin();
+
+          
 
             try {
 
@@ -1058,5 +1183,34 @@ private void resolveSpecial(
         }
 
         return eligible;
+    }
+    @Override
+    public void editAdminAccount() {
+        tryAction(() -> {
+            requireAdmin();
+            try {
+                new AdminAccountDialog(view, loadAdminProfileEmail(),
+                        adminAuthService.codeVersion() != null, this::updateAdminCode).setVisible(true);
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
+        });
+    }
+
+    private boolean updateAdminCode(Component parent, boolean generate) {
+        try {
+            requireAdmin();
+            byte[] version = adminAuthService.codeVersion();
+            if (!verifyAdminFactor(parent, Factor.PASSWORD)
+                    || (version != null && !verifyAdminFactor(parent, Factor.CODE))) {
+                return false;
+            }
+            requireAdmin();
+            return changeAdminCode(parent, version, generate);
+        } catch (IOException | RuntimeException ex) {
+            JOptionPane.showMessageDialog(parent, ex.getMessage(),
+                    "Admin Security", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
     }
 }
