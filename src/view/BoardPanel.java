@@ -71,7 +71,50 @@ public final class BoardPanel extends JPanel {
         addMouseMotionListener(mouse);
     }
     public void setOnSelect(Consumer<String> callback) { onSelect=Objects.requireNonNull(callback); }
-    public void setSession(GameSession value) { session=value;repaint(); }
+    // hop animation: when a hero moves forward it jumps square by square to its new place (quickly)
+    private GameSession watchedSession;
+    private final Map<String,Integer> lastPathIndex=new HashMap<>();   // piece id -> path index at the previous update
+    private String hopPieceId;                                        // hero that is hopping right now (null = none)
+    private List<String> hopSquares=List.of();                        // squares it hops over, start to end
+    private long hopStartedAt;
+    private double hopStepMillis;
+    private final javax.swing.Timer hopTimer=new javax.swing.Timer(15,e->repaint());
+    public void setSession(GameSession value) {
+        if(value!=watchedSession){watchedSession=value;lastPathIndex.clear();hopPieceId=null;}
+        else if(value!=null) startHopIfMoved(value);
+        if(value!=null) for(Player player:value.players()) for(Piece piece:player.pieces()) lastPathIndex.put(piece.id(),piece.pathIndex());
+        session=value;repaint();
+    }
+    /** Finds a hero that moved forward since the last update and starts its hop animation. */
+    private void startHopIfMoved(GameSession value){
+        Board board=value.board();
+        for(Player player:value.players()) for(Piece piece:player.pieces()) {
+            Integer before=lastPathIndex.get(piece.id());
+            int now=piece.pathIndex();
+            if(before==null || now<=before) continue;
+            List<String> path=board.path(piece.color());
+            List<String> squares=new ArrayList<>();
+            if(before<0) { squares.add(board.castleSlot(piece.color(),piece.number())); squares.addAll(path.subList(0,now+1)); }
+            else squares.addAll(path.subList(before,now+1));
+            hopPieceId=piece.id();hopSquares=squares;hopStartedAt=System.currentTimeMillis();
+            hopStepMillis=Math.max(45,Math.min(110,650.0/(squares.size()-1)));   // fast: never longer than about 0.65 s
+            hopTimer.start();
+            return;
+        }
+    }
+    /** Draws the hopping hero between two squares with a small jump; returns false when the hop has finished. */
+    private boolean drawHop(Graphics2D d,double x,double y,double s){
+        int steps=hopSquares.size()-1;
+        double progress=(System.currentTimeMillis()-hopStartedAt)/hopStepMillis;
+        Piece piece=session.findPiece(hopPieceId);
+        if(piece==null || steps<1 || progress>=steps){hopPieceId=null;hopTimer.stop();return false;}
+        int k=(int)progress; double t=progress-k;
+        Board.Position a=Board.Position.parse(hopSquares.get(k)), b=Board.Position.parse(hopSquares.get(k+1));
+        double ax=x+(a.column()-.5)*s, ay=y+(a.row()-.5)*s, bx=x+(b.column()-.5)*s, by=y+(b.row()-.5)*s;
+        double cx=ax+(bx-ax)*t, cy=ay+(by-ay)*t-Math.sin(Math.PI*t)*s*.45;          // arc: up and down on every square
+        paintPiece(d,piece,cx,cy,s*.69,false,false);
+        return true;
+    }
     public void setOpponentSelectionIds(Set<String> ids) {
         opponentSelectionIds = Set.copyOf(ids);
         repaint();
@@ -393,9 +436,11 @@ private void drawCastles(Graphics2D d, Board board,
             double[] yard=castleArea(board,color,x,y,s);
             if(yard!=null) drawClosedCastle(d,color,yard,s);
         }
+        boolean hopping=hopPieceId!=null;
         for(Player player:session.players()) {
             double[] yard=castleArea(board,player.color(),x,y,s);
             for(Piece piece:player.pieces()) {
+                if(hopping && piece.id().equals(hopPieceId)) continue;      // drawn by the hop animation
                 if(piece.state()==Piece.State.CASTLE && yard!=null) {
                     // heroes waiting at home stand in a neat 2x2 group in the middle of their castle
                     double[] c=yardSpot(yard,piece.number());
@@ -434,7 +479,7 @@ private void drawCastles(Graphics2D d, Board board,
         int colorNumber=0;
         for(Player player:session.players()) {
             int count=0;
-            for(Piece piece:player.pieces()) if(piece.state()==Piece.State.FINISHED) {
+            for(Piece piece:player.pieces()) if(piece.state()==Piece.State.FINISHED && !(hopping && piece.id().equals(hopPieceId))) {
                 double angle=Math.PI*2*(colorNumber+.25)/4;
                 double cx=centerX+Math.cos(angle)*s*(.55+count*.14);
                 double cy=centerY+Math.sin(angle)*s*(.55+count*.14);
@@ -443,6 +488,7 @@ private void drawCastles(Graphics2D d, Board board,
             }
             colorNumber++;
         }
+        if(hopping && !drawHop(d,x,y,s)) repaint();   // hop finished: draw the hero in its real place next time
     }
     /** Bounds of a player's castle in pixels {left, top, width, height}, or null if the board has none. */
     private static double[] castleArea(Board board,PlayerColor color,double x,double y,double s) {
