@@ -785,6 +785,21 @@ public final class GameEngine {
         completeMove(session);
     }
 
+    /** The current player ran out of time: the rest of the turn is skipped. */
+    public void timeOut(GameSession session) {
+        if (session.phase() == GameSession.Phase.FINISHED) {
+            return;
+        }
+        if (session.hasTemporaryEffectPlayer()) {
+            session.endTemporaryEffect();
+        }
+        session.record(
+            session.current().name()
+            + " ran out of time — turn skipped."
+        );
+        advanceTurn(session);
+    }
+
     private void advanceTurn(GameSession session) {
 
         session.dice(null);

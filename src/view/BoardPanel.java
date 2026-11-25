@@ -440,6 +440,7 @@ private void drawCastles(Graphics2D d, Board board,
         for(Player player:session.players()) {
             double[] yard=castleArea(board,player.color(),x,y,s);
             for(Piece piece:player.pieces()) {
+                if(piece.state()!=Piece.State.CASTLE && yard!=null) drawCastleShadow(d,piece,yard,s);
                 if(hopping && piece.id().equals(hopPieceId)) continue;      // drawn by the hop animation
                 if(piece.state()==Piece.State.CASTLE && yard!=null) {
                     // heroes waiting at home stand in a neat 2x2 group in the middle of their castle
@@ -489,6 +490,30 @@ private void drawCastles(Graphics2D d, Board board,
             colorNumber++;
         }
         if(hopping && !drawHop(d,x,y,s)) repaint();   // hop finished: draw the hero in its real place next time
+    }
+    // dark silhouettes of the heroes, cached by hero number and size
+    private final Map<String,java.awt.image.BufferedImage> shadowCache=new HashMap<>();
+    /** Leaves a soft dark shadow in the castle spot of a hero that has left the castle. */
+    private void drawCastleShadow(Graphics2D d,Piece piece,double[] yard,double s) {
+        double[] c=yardSpot(yard,piece.number());
+        double diameter=Math.min(Math.min(yard[2],yard[3])*.29,s*1.7);
+        int box=(int)Math.ceil(diameter*2);
+        if(box<4) return;
+        if(shadowCache.size()>64) shadowCache.clear();              // window was resized many times
+        java.awt.image.BufferedImage shadow=shadowCache.computeIfAbsent(piece.number()+"/"+box,key->{
+            java.awt.image.BufferedImage img=new java.awt.image.BufferedImage(box,box,java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g=img.createGraphics();
+            paintHero(g,piece.number(),Color.GRAY,box/2.0,box/2.0,diameter,false);
+            g.setComposite(AlphaComposite.SrcIn);                     // keep the hero's outline, paint it one dark colour
+            g.setColor(new Color(20,24,45));
+            g.fillRect(0,0,box,box);
+            g.dispose();
+            return img;
+        });
+        Composite old=d.getComposite();
+        d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,.28f));
+        d.drawImage(shadow,(int)Math.round(c[0]-box/2.0),(int)Math.round(c[1]-box/2.0),null);
+        d.setComposite(old);
     }
     /** Bounds of a player's castle in pixels {left, top, width, height}, or null if the board has none. */
     private static double[] castleArea(Board board,PlayerColor color,double x,double y,double s) {

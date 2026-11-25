@@ -533,6 +533,19 @@ view.setOpponentSelectionIds(Set.of());
 
     }
 
+    /** The current player's 30 seconds are over: skip the rest of the turn. */
+    @Override
+    public void timeOut() {
+        if (resolvingDialog || selectingOpponentPiece || session == null) {
+            return;
+        }
+        tryAction(() -> {
+            engine.timeOut(session);
+            refresh();
+            postMatchCheck();
+        });
+    }
+
     @Override
 
     public void selectPiece(String pieceId) {
