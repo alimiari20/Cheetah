@@ -1,6 +1,8 @@
 
 package com.cheetahludo;
 
+import view.Dialogs;
+
 import controller.GameController;
 import model.BoardRepository;
 import model.Difficulty;
@@ -12,7 +14,7 @@ import security.AdminSetup;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
+import view.Theme;
 import java.awt.GraphicsEnvironment;
 import java.util.Random;
 
@@ -42,12 +44,7 @@ public final class Main {
 
         SwingUtilities.invokeLater(() -> {
             try {
-                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            } catch (Exception ignored) {
-                // Swing's default look and feel is also supported.
-            }
-
-            try {
+                Theme.install();
                 GameFrame frame = new GameFrame();
                 GameEngine engine = new GameEngine(new BoardRepository());
                 if (args.length == 1 && "--capture-lab".equals(args[0])) {
@@ -63,7 +60,7 @@ public final class Main {
                 System.out.println("Cheetah Ludo Swing launched successfully.");
             } catch (Exception error) {
                 error.printStackTrace();
-                JOptionPane.showMessageDialog(null,
+                Dialogs.showMessageDialog(null,
                         "Cannot start Cheetah Ludo:\n" + error.getMessage(),
                         "Startup Error", JOptionPane.ERROR_MESSAGE);
             }

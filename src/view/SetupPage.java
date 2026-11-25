@@ -1,5 +1,7 @@
 package view;
 
+import static view.Theme.Tone.*;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
@@ -32,24 +34,24 @@ public final class SetupPage extends UiKit.GradientPage {
         setBorder(new EmptyBorder(8,16,10,16));
         JPanel header=UiKit.transparent(new BorderLayout());
         JButton back=Theme.button("← BACK TO MENU",false);back.addActionListener(e->onBack.run());
-        back.setPreferredSize(new Dimension(170,36));header.add(back,BorderLayout.WEST);
+        back.setPreferredSize(new Dimension(170,36));header.add(back,BorderLayout.LINE_START);
         JPanel headline=UiKit.transparent(new GridLayout(2,1));
         headline.add(UiKit.title("GAME SETUP",21));headline.add(UiKit.sub("Choose players, colors and board difficulty"));
         header.add(headline,BorderLayout.CENTER);
-        header.add(Box.createHorizontalStrut(140),BorderLayout.EAST);
+        header.add(Box.createHorizontalStrut(140),BorderLayout.LINE_END);
         add(header,BorderLayout.NORTH);
         JPanel layout=UiKit.transparent(new GridBagLayout());
         GridBagConstraints c=new GridBagConstraints();c.gridy=0;c.fill=GridBagConstraints.BOTH;c.weighty=1;c.insets=new Insets(3,5,3,5);
         c.gridx=0;c.weightx=.54;layout.add(form(),c);
         c.gridx=1;c.weightx=.46;layout.add(previewPane(),c);
         JScrollPane scroll=new JScrollPane(layout);scroll.setOpaque(false);scroll.getViewport().setOpaque(false);
-        scroll.setBorder(null);scroll.getVerticalScrollBar().setUnitIncrement(18);
+        scroll.setBorder(BorderFactory.createEmptyBorder());scroll.getVerticalScrollBar().setUnitIncrement(18);
         add(scroll,BorderLayout.CENTER);
         chooseCount(4);chooseDifficulty(Difficulty.MEDIUM);updateColorButtons();
     }
     public void setPreviewProvider(BiFunction<Difficulty,List<PlayerColor>,GameSession> fn){previewProvider=fn;updatePreview();}
     private JPanel form(){
-        JPanel root=UiKit.transparent(new BorderLayout(0,7));root.setPreferredSize(new Dimension(490,490));
+        JPanel root=UiKit.transparent(new BorderLayout(0,7));root.setPreferredSize(new Dimension(430,490));
         JPanel stack=UiKit.transparent();stack.setLayout(new BoxLayout(stack,BoxLayout.Y_AXIS));
         JPanel counts=new UiKit.GlassCard(new BorderLayout(0,5));counts.setBorder(new EmptyBorder(9,12,9,12));
         counts.add(UiKit.goldLabel("♙  NUMBER OF PLAYERS (2–4)"),BorderLayout.NORTH);
@@ -64,16 +66,16 @@ public final class SetupPage extends UiKit.GradientPage {
         PlayerColor[] colors=PlayerColor.values();
         for(int i=0;i<4;i++) {
             JPanel row=UiKit.transparent(new BorderLayout(6,0));row.setBorder(new EmptyBorder(1,2,1,2));
-            JLabel circle=Theme.label("●",22,Font.BOLD,Theme.player(colors[i]));colorMarkers[i]=circle;row.add(circle,BorderLayout.WEST);
+            JLabel circle=Theme.label("●",22,Font.BOLD,Theme.player(colors[i]));colorMarkers[i]=circle;row.add(circle,BorderLayout.LINE_START);
             names[i]=UiKit.field("Player "+(i+1));row.add(names[i],BorderLayout.CENTER);
-            JPanel choices=UiKit.transparent(new FlowLayout(FlowLayout.RIGHT,2,0));
+            JPanel choices=UiKit.transparent(new FlowLayout(FlowLayout.TRAILING,2,0));
             for(int j=0;j<4;j++){
                 final int rowIndex=i;final PlayerColor chosen=colors[j];
                 ColorDotButton dot=new ColorDotButton(chosen);
                 dot.addActionListener(e->chooseColor(rowIndex,chosen));
                 colorButtons[i][j]=dot;choices.add(dot);
             }
-            row.add(choices,BorderLayout.EAST);
+            row.add(choices,BorderLayout.LINE_END);
             playerRows[i]=row;rows.add(row);
         }
         people.add(rows,BorderLayout.CENTER);people.setMaximumSize(new Dimension(Integer.MAX_VALUE,225));
@@ -97,8 +99,8 @@ public final class SetupPage extends UiKit.GradientPage {
         JPanel intro=UiKit.transparent(new GridLayout(2,1,0,3));previewTitle.setHorizontalAlignment(SwingConstants.CENTER);
         intro.add(previewTitle);intro.add(UiKit.sub("Board dimensions and piece positions update live"));
         card.add(intro,BorderLayout.NORTH);
-        preview.setOpaque(false);preview.setBackground(Theme.SURFACE_2);
-        preview.setPreferredSize(new Dimension(365,365));
+        preview.setOpaque(false);
+        preview.setPreferredSize(new Dimension(330,330));
         card.add(preview,BorderLayout.CENTER);
         JLabel hint=UiKit.sub("★ Safe squares      ? Questions      ◈ Surprises");card.add(hint,BorderLayout.SOUTH);
         return card;
@@ -106,7 +108,7 @@ public final class SetupPage extends UiKit.GradientPage {
     private void chooseCount(int n) {
         playerCount=n;for(int i=0;i<3;i++)((UiKit.GlowButton)countButtons[i]).setActive(i==n-2);
         for(int i=0;i<4;i++){playerRows[i].setVisible(i<n);names[i].setEnabled(i<n);}
-        for(int i=0;i<3;i++)countButtons[i].setText((i+2)+" PLAYERS"+(i==n-2?"  ✓":""));
+        for(int i=0;i<3;i++)Messages.set(countButtons[i],(i+2)+" PLAYERS"+(i==n-2?"  ✓":""));
         updatePreview();revalidate();repaint();
     }
     private void chooseColor(int row,PlayerColor chosen){
@@ -125,10 +127,10 @@ public final class SetupPage extends UiKit.GradientPage {
     private void chooseDifficulty(Difficulty d) {
         difficulty=d;
         for(int i=0;i<3;i++){
-            modeButtons[i].setText(new String[]{"EASY", "MEDIUM", "HARD"}[i]+(d.ordinal()==i?"  ✓":""));
+            Messages.set(modeButtons[i],new String[]{"EASY", "MEDIUM", "HARD"}[i]+(d.ordinal()==i?"  ✓":""));
             ((UiKit.GlowButton)modeButtons[i]).setActive(d.ordinal()==i);
         }
-        previewTitle.setText("LIVE BOARD PREVIEW  •  "+d.name()+"  "+d.boardSize()+" × "+d.boardSize());
+        Messages.set(previewTitle,"LIVE BOARD PREVIEW  •  "+d.name()+"  "+d.boardSize()+" × "+d.boardSize());
         updatePreview();
     }
     private void updatePreview(){
@@ -141,10 +143,10 @@ public final class SetupPage extends UiKit.GradientPage {
         List<String> list=new ArrayList<>();
         for(int i=0;i<playerCount;i++){
             String name=names[i].getText().trim();
-            if(name.isEmpty()){JOptionPane.showMessageDialog(this,"Player "+(i+1)+" needs a name.");names[i].requestFocus();return;}
-            if(name.length()>24){JOptionPane.showMessageDialog(this,"Player names must be 24 characters or less.");return;}
+            if(name.isEmpty()){Dialogs.showMessageDialog(this,"Player "+(i+1)+" needs a name.");names[i].requestFocus();return;}
+            if(name.length()>24){Dialogs.showMessageDialog(this,"Player names must be 24 characters or less.");return;}
             if(list.stream().anyMatch(name::equalsIgnoreCase)){
-                JOptionPane.showMessageDialog(this,"Please choose different names for each player.");return;
+                Dialogs.showMessageDialog(this,"Please choose different names for each player.");return;
             }
             list.add(name);
         }
@@ -155,14 +157,14 @@ public final class SetupPage extends UiKit.GradientPage {
         private final PlayerColor color;
         ColorDotButton(PlayerColor color){
             this.color=color;setPreferredSize(new Dimension(23,25));setFocusPainted(false);
-            setContentAreaFilled(false);setBorderPainted(false);
+            setContentAreaFilled(false);setBorderPainted(false);setRolloverEnabled(true);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setToolTipText("Choose "+color.label());
+            Messages.bind(this, () -> setToolTipText(Messages.get("Choose color: ") + Messages.get(color.label())));
         }
         @Override protected void paintComponent(Graphics g){
             Graphics2D d=(Graphics2D)g.create();d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            d.setColor(Theme.player(color));d.fillOval(4,5,15,15);
-            if(isSelected()){d.setColor(Theme.WHITE);d.setStroke(new BasicStroke(2));d.drawOval(2,3,19,19);}
+            Color team=Theme.player(color);d.setColor(getModel().isRollover()?Theme.blend(team,Color.WHITE,.2f):team);d.fillOval(4,5,15,15);
+            if(isSelected() || hasFocus()){d.setColor((isSelected()?ACCENT:TEXT).color());d.setStroke(new BasicStroke(2));d.drawOval(2,3,19,19);}
             d.dispose();
         }
     }

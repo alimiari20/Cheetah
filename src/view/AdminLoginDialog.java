@@ -1,6 +1,8 @@
 
 package view;
 
+import static view.Theme.Tone.*;
+
 import javax.swing.*;
 import java.awt.*;
 import java.util.Arrays;
@@ -17,16 +19,16 @@ public final class AdminLoginDialog {
         MenuStyle.field(code);
         MenuStyle.field(confirmation);
         JLabel codeLabel = MenuStyle.label("New Authentication Code (16 to 128 characters)",
-                14, Font.BOLD, MenuStyle.TEXT);
+                14, Font.BOLD, TEXT);
         codeLabel.setLabelFor(code);
         fields.add(codeLabel);
         fields.add(code);
-        JLabel confirmLabel = MenuStyle.label("Confirm Authentication Code", 14, Font.BOLD, MenuStyle.TEXT);
+        JLabel confirmLabel = MenuStyle.label("Confirm Authentication Code", 14, Font.BOLD, TEXT);
         confirmLabel.setLabelFor(confirmation);
         fields.add(confirmLabel);
         fields.add(confirmation);
         try {
-            int result = JOptionPane.showConfirmDialog(parent, fields,
+            int result = Dialogs.showConfirmDialog(parent, fields,
                     enrollment ? "Set Up Authentication Code" : "Change Authentication Code",
                     JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
             if (result != JOptionPane.OK_OPTION) {
@@ -41,7 +43,7 @@ public final class AdminLoginDialog {
                 return entered;
             }
             Arrays.fill(entered, '\0');
-            JOptionPane.showMessageDialog(parent, "The Authentication Codes did not match.",
+            Dialogs.showMessageDialog(parent, "The Authentication Codes did not match.",
                     "Admin Security", JOptionPane.WARNING_MESSAGE);
             return null;
         } finally {
@@ -57,25 +59,27 @@ public final class AdminLoginDialog {
         JDialog dialog = new JDialog(owner, "Cheetah Ludo — " + title, Dialog.ModalityType.APPLICATION_MODAL);
         JPanel content = new MenuStyle.Page(new BorderLayout(0, 15));
         content.setBorder(BorderFactory.createEmptyBorder(22, 24, 20, 24));
-        content.add(MenuStyle.label(title, 28, Font.BOLD, MenuStyle.TEXT), BorderLayout.NORTH);
+        content.add(MenuStyle.label(title, 28, Font.BOLD, TEXT), BorderLayout.NORTH);
 
         JPanel card = MenuStyle.card(new BorderLayout(), 17);
         JPanel fields = MenuStyle.column();
-        JPasswordField password = new JPasswordField(26);
-        MenuStyle.field(password);
-        password.setMaximumSize(new Dimension(Integer.MAX_VALUE, password.getPreferredSize().height));
-        JLabel passwordLabel = MenuStyle.label(fieldLabel, 14, Font.BOLD, MenuStyle.TEXT);
+        LoginSecretField secret = new LoginSecretField(Messages.isHebrew() ? java.util.Locale.forLanguageTag("he") : java.util.Locale.ENGLISH);
+        if (parent != null && parent.getComponentOrientation() != ComponentOrientation.UNKNOWN) {
+            secret.applyComponentOrientation(parent.getComponentOrientation());
+        }
+        JPasswordField password = secret.input();
+        JLabel passwordLabel = MenuStyle.label(fieldLabel, 14, Font.BOLD, TEXT);
         passwordLabel.setLabelFor(password);
-        JLabel status = MenuStyle.label("Attempts remaining: " + maxAttempts, 13, Font.PLAIN, MenuStyle.MUTED);
+        JLabel status = MenuStyle.label("Attempts remaining: " + maxAttempts, 13, Font.PLAIN, MUTED);
         MenuStyle.addLine(fields, passwordLabel, 0);
-        MenuStyle.addLine(fields, password, 7);
+        MenuStyle.addLine(fields, secret, 7);
         MenuStyle.addLine(fields, status, 11);
         card.add(fields);
         content.add(card, BorderLayout.CENTER);
 
         JButton cancel = MenuStyle.button("CANCEL", false, dialog::dispose);
         JButton login = MenuStyle.button("LOGIN", true);
-        JPanel buttons = UiKit.transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JPanel buttons = UiKit.transparent(new FlowLayout(FlowLayout.TRAILING, 8, 0));
         buttons.add(cancel);
         buttons.add(login);
         content.add(buttons, BorderLayout.SOUTH);
@@ -88,12 +92,12 @@ public final class AdminLoginDialog {
             void submit() {
                 if (!login.isEnabled()) return;
                 char[] entered = password.getPassword();
-                password.setText("");
+                secret.clear();
                 login.setEnabled(false);
                 cancel.setEnabled(false);
-                password.setEnabled(false);
+                secret.setEnabled(false);
                 dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
-                status.setText("Checking " + secretName + "...");
+                Messages.set(status,"Checking " + secretName + "...");
 
                 new SwingWorker<Boolean, Void>() {
                     @Override protected Boolean doInBackground() {
@@ -121,17 +125,17 @@ public final class AdminLoginDialog {
                             return;
                         }
                         if (--remaining <= 0) {
-                            JOptionPane.showMessageDialog(dialog,
+                            Dialogs.showMessageDialog(dialog,
                                     "Too many failed attempts. Try again in " + lockoutMinutes + " minutes.",
                                     "Admin Account Locked", JOptionPane.WARNING_MESSAGE);
                             dialog.dispose();
                             return;
                         }
-                        status.setText("Incorrect " + secretName + ". Attempts remaining: " + remaining);
-                        status.setForeground(MenuStyle.GOLD);
+                        Messages.set(status,"Incorrect " + secretName + ". Attempts remaining: " + remaining);
+                        Theme.foreground(status,ACCENT);
                         login.setEnabled(true);
                         cancel.setEnabled(true);
-                        password.setEnabled(true);
+                        secret.setEnabled(true);
                         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
                         password.requestFocusInWindow();
                     }
@@ -141,7 +145,7 @@ public final class AdminLoginDialog {
 
         Attempt attempt = new Attempt();
         login.addActionListener(event -> attempt.submit());
-        dialog.setContentPane(content);
+        GlobalHeader.install(dialog,content);
         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         dialog.getRootPane().setDefaultButton(login);
         dialog.getRootPane().registerKeyboardAction(event -> {
@@ -153,7 +157,7 @@ public final class AdminLoginDialog {
         try {
             dialog.setVisible(true);
         } finally {
-            password.setText("");
+            secret.clear();
         }
         if (attempt.failure != null) throw attempt.failure;
         return attempt.authenticated;

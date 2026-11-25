@@ -1,5 +1,7 @@
 package view;
 
+import static view.Theme.Tone.*;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
@@ -18,7 +20,7 @@ public final class QuestionDialog {
         root.setBorder(new EmptyBorder(22,27,24,27));
         JPanel heading=UiKit.transparent(new GridLayout(3,1,0,6));
         heading.add(UiKit.title("?  QUESTION CHALLENGE",24));
-        heading.add(UiKit.sub(question.category().toUpperCase()+"  •  "+question.difficulty().name()+" QUESTION"));
+        heading.add(UiKit.sub(question.category()+"  •  "+question.difficulty().name()+" QUESTION"));
         heading.add(UiKit.sub("Correct: +"+question.movementReward()+" squares     Incorrect: -"+question.movementReward()+" squares"));
         root.add(heading,BorderLayout.NORTH);
         JPanel center=new UiKit.GlassCard(new BorderLayout(0,13));center.setBorder(new EmptyBorder(15,18,17,18));
@@ -28,14 +30,18 @@ public final class QuestionDialog {
         JPanel answers=UiKit.transparent(new GridLayout(4,1,0,9));
         JRadioButton[] radio=new JRadioButton[4];ButtonGroup group=new ButtonGroup();
         for(int i=0;i<4;i++){
-            radio[i]=new JRadioButton("  "+(char)('A'+i)+"    "+question.choices().get(i));
-            radio[i].setBackground(new Color(13,38,98));radio[i].setForeground(Theme.WHITE);
+            int index=i;
+            JRadioButton option=new JRadioButton();
+            radio[i]=option;
+            Messages.bind(option, () -> option.setText("  "
+                    + (char)((Messages.isHebrew() ? 'א' : 'A')+index) + "    " + question.choices().get(index)));
+            Theme.background(radio[i],SECONDARY);Theme.foreground(radio[i],TEXT);
             radio[i].setFont(Theme.font(13,Font.PLAIN));radio[i].setFocusPainted(false);
             radio[i].setOpaque(true);radio[i].setBorder(new EmptyBorder(12,10,12,10));
             group.add(radio[i]);answers.add(radio[i]);
         }
         center.add(answers,BorderLayout.CENTER);
-        JLabel feedback=Theme.label("Select one answer to continue.",12,Font.BOLD,Theme.MUTED);
+        JLabel feedback=Theme.label("Select one answer to continue.",12,Font.BOLD,MUTED);
         JTextArea explanation=UiKit.area("",3);explanation.setEditable(false);explanation.setFocusable(false);
         explanation.setVisible(false);
         JPanel bottom=UiKit.transparent(new BorderLayout(0,10));
@@ -47,22 +53,22 @@ public final class QuestionDialog {
         apply.addActionListener(e->{
             if(answered.get()){dialog.dispose();return;}
             int selected=-1;for(int i=0;i<4;i++)if(radio[i].isSelected()){selected=i;break;}
-            if(selected<0){feedback.setText("Please select A, B, C or D.");return;}
+            if(selected<0){Messages.set(feedback,"Please select A, B, C or D.");return;}
             boolean success=selected==question.correctIndex();correct.set(success);answered.set(true);
             for(int i=0;i<4;i++){
                 radio[i].setEnabled(false);
-                if(i==question.correctIndex()){radio[i].setForeground(Theme.SUCCESS);radio[i].setFont(Theme.font(13,Font.BOLD));}
-                else if(i==selected)radio[i].setForeground(new Color(255,100,120));
+                if(i==question.correctIndex()){Theme.foreground(radio[i],SUCCESS);radio[i].setFont(Theme.font(13,Font.BOLD));}
+                else if(i==selected)Theme.foreground(radio[i],DANGER);
             }
-            feedback.setForeground(success?Theme.SUCCESS:new Color(255,120,139));
-            feedback.setText(success?"✓  CORRECT!  MOVE "+question.movementReward()+" SQUARES FORWARD":
+            Theme.foreground(feedback,success?SUCCESS:DANGER);
+            Messages.set(feedback,success?"✓  CORRECT!  MOVE "+question.movementReward()+" SQUARES FORWARD":
                  "✕  INCORRECT. MOVE "+question.movementReward()+" SQUARES BACK.");
             explanation.setText(question.explanation());explanation.setVisible(true);
-            apply.setText("APPLY MOVEMENT & CONTINUE  →");
+            Messages.set(apply,"APPLY MOVEMENT & CONTINUE  →");
             dialog.pack();dialog.setSize(Math.max(dialog.getWidth(),600),Math.min(720,dialog.getHeight()));
             dialog.setLocationRelativeTo(owner);
         });
-        dialog.setContentPane(root);dialog.setSize(670,630);dialog.setMinimumSize(new Dimension(580,500));
+        GlobalHeader.install(dialog,root);dialog.setSize(670,660);dialog.setMinimumSize(new Dimension(580,500));
         dialog.setLocationRelativeTo(owner);dialog.setVisible(true);
         return correct.get();
     }

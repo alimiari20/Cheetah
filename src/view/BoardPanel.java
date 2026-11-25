@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 
 /** HiDPI-friendly scalable, clickable Ludo board. Painting never changes game state. */
 public final class BoardPanel extends JPanel {
+    private static final Color TRACK = new Color(251, 252, 255);
     private GameSession session;
     private CapturePlayback playback;
 
@@ -66,7 +67,7 @@ public final class BoardPanel extends JPanel {
     }
     public BoardPanel() {
         setOpaque(false);
-        setBackground(Theme.SURFACE);
+        setBackground(new Color(21, 49, 116));
         setPreferredSize(new Dimension(710,710));
         MouseAdapter mouse = new MouseAdapter() {
         	@Override
@@ -169,7 +170,7 @@ public final class BoardPanel extends JPanel {
             PlayerColor color = parseColor(c.color());
             if (color!=null) return Theme.blend(Theme.player(color),Color.WHITE,.27f);
         }
-        return Theme.TRACK;
+        return TRACK;
     }
     private static PlayerColor parseColor(String value) {
         try { return PlayerColor.valueOf(value.toUpperCase(Locale.ROOT)); }
@@ -317,7 +318,7 @@ private void drawCastles(Graphics2D d, Board board,
         d.setStroke(new BasicStroke(1.5f));
         d.setColor(new Color(96,109,134));
         for(Polygon triangle:quadrants) d.draw(triangle);
-        d.setColor(Theme.WHITE);
+        d.setColor(new Color(244, 249, 255));
         d.setFont(Theme.font(Math.max(10f,(float)(s*.37)),Font.BOLD));
         centerText(d,"HOME",cx,cy+(s*.12));
     }
@@ -381,7 +382,7 @@ private void drawCastles(Graphics2D d, Board board,
             }
             case "arrow" -> {
                 PlayerColor color=parseColor(cell.specialColor());
-                colors.put('X',color==null?Theme.MUTED:Theme.player(color));
+                colors.put('X',color==null?new Color(173, 202, 250):Theme.player(color));
                 int turns=switch(cell.arrow()) { case "down" -> 1; case "left" -> 2; case "up" -> 3; default -> 0; };
                 drawPixelIcon(d,ARROW_ART,colors,cx,cy,s*.72/10,turns,true);
             }

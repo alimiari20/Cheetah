@@ -1,5 +1,7 @@
 package view;
 
+import static view.Theme.Tone.*;
+
 import model.PlayerColor;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -11,16 +13,16 @@ final class PlayerMenuPage extends MenuStyle.Page {
         super(new BorderLayout(0, 22));
         setBorder(new EmptyBorder(24, 34, 24, 34));
         JPanel top = UiKit.transparent(new BorderLayout(12, 0));
-        top.add(MenuStyle.label("CHEETAH LUDO", 17, Font.BOLD, MenuStyle.GOLD), BorderLayout.WEST);
-        top.add(MenuStyle.button("ADMIN LOGIN", false, login), BorderLayout.EAST);
+        top.add(MenuStyle.label("CHEETAH LUDO", 17, Font.BOLD, ACCENT), BorderLayout.LINE_START);
+        top.add(MenuStyle.button("ADMIN LOGIN", false, login), BorderLayout.LINE_END);
         add(top, BorderLayout.NORTH);
 
         JPanel feature = MenuStyle.card(new GridBagLayout(), 22);
         JPanel copy = MenuStyle.column();
         MenuStyle.addLine(copy, MenuStyle.label("LOCAL MULTIPLAYER  /  2–4 PLAYERS",
-                12, Font.BOLD, MenuStyle.GOLD), 0);
-        MenuStyle.addLine(copy, MenuStyle.label("Cheetah Ludo", 44, Font.BOLD, MenuStyle.TEXT), 11);
-        MenuStyle.addLine(copy, MenuStyle.label("Race your rivals to Home.", 17, Font.PLAIN, MenuStyle.MUTED), 5);
+                12, Font.BOLD, ACCENT), 0);
+        MenuStyle.addLine(copy, MenuStyle.label("Cheetah Ludo", 44, Font.BOLD, TEXT), 11);
+        MenuStyle.addLine(copy, MenuStyle.label("Race your rivals to Home.", 17, Font.PLAIN, MUTED), 5);
         JButton start = MenuStyle.button("NEW GAME", "Choose a board and set up your match", true, play);
         start.setMaximumSize(start.getPreferredSize());
         MenuStyle.addLine(copy, start, 26);
@@ -47,7 +49,7 @@ final class PlayerMenuPage extends MenuStyle.Page {
         center.add(feature, stage);
         add(MenuStyle.scroll(center), BorderLayout.CENTER);
 
-        JPanel footer = UiKit.transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JPanel footer = UiKit.transparent(new FlowLayout(FlowLayout.LEADING, 8, 0));
         footer.add(MenuStyle.button("RULES & CONTROLS", false, rules));
         footer.add(MenuStyle.button("EXIT", false, exit));
         add(footer, BorderLayout.SOUTH);
@@ -87,10 +89,10 @@ final class PlayerMenuPage extends MenuStyle.Page {
             float glow = (float) (Math.sin(time * 1.2) * .07 + .93);
             g.setPaint(new RadialGradientPaint(new Point2D.Double(0, 0), 193,
                     new float[]{0, .67f, 1}, new Color[]{
-                        new Color(39, 65, 108), new Color(22, 39, 69), MenuStyle.NAVY
+                        Theme.blend(SURFACE.color(), BORDER.color(), .65f), SECONDARY.color(), SURFACE.color()
                     }));
             g.fillOval(-193, -193, 386, 386);
-            g.setColor(new Color(238, 193, 110, (int) (95 * glow)));
+            g.setColor(new Color(ACCENT.color().getRed(), ACCENT.color().getGreen(), ACCENT.color().getBlue(), (int) (95 * glow)));
             g.drawOval(-150, -150, 300, 300);
             g.drawOval(-166, -166, 332, 332);
             g.rotate(Math.PI / 4);

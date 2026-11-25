@@ -1,5 +1,7 @@
 package view;
 
+import static view.Theme.Tone.*;
+
 import java.util.StringJoiner;
 import javax.swing.*;
 import javax.swing.border.*;
@@ -35,15 +37,16 @@ public final class GameFrame extends JFrame {
     private Actions actions;
     private final CardLayout screenLayout=new CardLayout();
     private final JPanel screens=new JPanel(screenLayout);
+    private final GlobalHeader header=new GlobalHeader();
     private final SetupPage setupPage;
     private final HistoryPage historyPage;
     private final QuestionAdminPage adminPage;
     private final BoardPanel boardPanel=new BoardPanel();
     private final JLabel modeLabel=UiKit.goldLabel("CLASSIC MODE");
-    private final JLabel turnLabel=Theme.label("Player 1",14,Font.BOLD,Theme.GOLD);
-    private final JLabel turnCounter=Theme.label("TURN 01",11,Font.BOLD,Theme.MUTED);
+    private final JLabel turnLabel=Theme.label("Player 1",14,Font.BOLD,ACCENT);
+    private final JLabel turnCounter=Theme.label("TURN 01",11,Font.BOLD,MUTED);
     /** Live total game duration (SRS 3.2.2.3.8), refreshed every second while a match is running. */
-    private final JLabel clockLabel=Theme.label("TIME  00:00",12,Font.BOLD,Theme.GOLD);
+    private final JLabel clockLabel=Theme.label("TIME  00:00",12,Font.BOLD,ACCENT);
     private final Timer clock=new Timer(1000,e->updateClock());
     private GameSession clockSession;
     // pause: the screen is covered, buttons and keys do nothing, and the clock does not count the paused time
@@ -51,24 +54,24 @@ public final class GameFrame extends JFrame {
     private boolean paused;
     private long pausedMillis;                 // total paused time in the current game
     private long pauseStartedAt;
-    private final JLabel diceDetails=Theme.label("Roll to begin",12,Font.BOLD,Theme.WHITE);
+    private final JLabel diceDetails=Theme.label("Roll to begin",12,Font.BOLD,TEXT);
     private final JLabel movementTitle =
-    	    Theme.label("AVAILABLE MOVES", 11, Font.BOLD, Theme.MUTED);
+            Theme.label("AVAILABLE MOVES", 11, Font.BOLD, MUTED);
     private final JLabel resultValue =
-    	    Theme.label("–", 30, Font.BOLD, Theme.GOLD);
+            Theme.label("–", 30, Font.BOLD, ACCENT);
 
     	private final JLabel movementValue =
-    			Theme.label("READY", 14, Font.BOLD, Theme.GOLD);
-    private final JLabel phaseLabel=Theme.label("READY TO ROLL",12,Font.BOLD,Theme.SUCCESS);
-    private final JLabel instruction=Theme.label("Choose Roll Dice to begin",13,Font.BOLD,Theme.MUTED);
+            Theme.label("READY", 14, Font.BOLD, ACCENT);
+    private final JLabel phaseLabel=Theme.label("READY TO ROLL",12,Font.BOLD,SUCCESS);
+    private final JLabel instruction=Theme.label("Choose Roll Dice to begin",13,Font.BOLD,MUTED);
     private final JButton rollButton=Theme.button("ROLL DICE  ⚄",true);
     private final JButton passButton=Theme.button("PASS TURN",false);
     private final JPanel leftPlayers=UiKit.transparent();
     private final JPanel rightPlayers=UiKit.transparent();
     private final DieFace regularFace=new DieFace(),specialFace=new DieFace();
-    private final JLabel multiplier=Theme.label("",12,Font.BOLD,Theme.GOLD);
+    private final JLabel multiplier=Theme.label("",12,Font.BOLD,ACCENT);
     private final JLabel specialDieLabel =
-    	    Theme.label("BOOST DIE", 11, Font.BOLD, Theme.MUTED);
+            Theme.label("BOOST DIE", 11, Font.BOLD, MUTED);
     /** Move history: one short, coloured line per event, newest first, grouped by turn. */
     private final JPanel history=new JPanel();
     private final AdminDashboardPage dashboard;
@@ -86,7 +89,8 @@ public final class GameFrame extends JFrame {
         setLocationRelativeTo(null);
         screens.add(new PlayerMenuPage(
                 () -> actions.newGame(), () -> actions.history(),
-                () -> actions.openAdminDashboard(), this::showRules, this::confirmExit), "MENU");
+                () -> actions.openAdminDashboard(),
+                this::showRules, this::confirmExit), "MENU");
         dashboard = new AdminDashboardPage(
                 () -> actions.logoutAdmin(), () -> actions.questionAdmin(),
                 () -> actions.history(), () -> actions.editAdminAccount(),
@@ -100,7 +104,9 @@ public final class GameFrame extends JFrame {
         adminPage=new QuestionAdminPage(()->{if(actions!=null)actions.showMenu();},
                 q->{if(actions!=null)actions.saveQuestion(q);},id->{if(actions!=null)actions.deleteQuestion(id);});
         screens.add(adminPage,"ADMIN");
-        setContentPane(screens);
+        JPanel shell=GlobalHeader.wrap(screens,header);
+        Messages.bind(shell, () -> setTitle(Messages.get("Cheetah Ludo")));
+        setContentPane(shell);
         boardPanel.setOnSelect(id->{if(actions!=null)actions.selectPiece(id);});
         rollButton.addActionListener(e->{if(actions!=null)actions.roll();});
         passButton.addActionListener(e->{if(actions!=null)actions.pass();});
@@ -109,11 +115,14 @@ public final class GameFrame extends JFrame {
         bindShortcut(KeyEvent.VK_ESCAPE,"pause",()->{if(isGameVisible())setPaused(!paused);});
         setGlassPane(pauseOverlay);
         buildMenu();
+        Messages.refresh(this);
     }
     public void openCaptureLab(GameEngine engine) {
-        setTitle("Cheetah Ludo — Capture Lab");
         setJMenuBar(null);
-        setContentPane(new CaptureLab(engine, boardPanel));
+        JPanel shell=GlobalHeader.wrap(new CaptureLab(engine, boardPanel),header);
+        Messages.bind(shell, () -> setTitle(Messages.get("Cheetah Ludo — Capture Lab")));
+        setContentPane(shell);
+        Messages.refresh(this);
         setVisible(true);
     }
     @Override public void dispose() {
@@ -142,14 +151,14 @@ public final class GameFrame extends JFrame {
         JButton menu=Theme.button("⌂  MENU",false);menu.addActionListener(e->{if(actions!=null)actions.showMenu();});
         JButton exit=Theme.button("EXIT GAME",false);exit.addActionListener(e->{if(actions!=null)actions.showMenu();});
         JButton pause=Theme.button("",false);pause.addActionListener(e->setPaused(true));
-        pause.setIcon(new PauseIcon());pause.setToolTipText("Pause (Esc)");               // just the pause symbol
+        pause.setIcon(new PauseIcon());Messages.bind(pause, () -> pause.setToolTipText(Messages.get("Pause (Esc)")));               // just the pause symbol
         pause.setPreferredSize(new Dimension(64,menu.getPreferredSize().height));
-        JPanel leftButtons=UiKit.transparent(new FlowLayout(FlowLayout.LEFT,8,0));leftButtons.add(menu);leftButtons.add(pause);
-        head.add(leftButtons,BorderLayout.WEST);head.add(exit,BorderLayout.EAST);
-        JPanel title=UiKit.transparent(new GridLayout(1,3));                 // one compact line: mode | name | time
-        modeLabel.setHorizontalAlignment(SwingConstants.CENTER);title.add(modeLabel);
-        JLabel subtitle=UiKit.sub("CHEETAH LUDO ");title.add(subtitle);
-        clockLabel.setHorizontalAlignment(SwingConstants.CENTER);title.add(clockLabel);
+        JPanel leftButtons=UiKit.transparent(new FlowLayout(FlowLayout.LEADING,8,0));leftButtons.add(menu);leftButtons.add(pause);
+        head.add(leftButtons,BorderLayout.LINE_START);head.add(exit,BorderLayout.LINE_END);
+        JPanel title=UiKit.transparent(new BorderLayout(12,0));
+        title.add(modeLabel,BorderLayout.LINE_START);
+        title.add(UiKit.sub("CHEETAH LUDO"),BorderLayout.CENTER);
+        title.add(clockLabel,BorderLayout.LINE_END);
         head.add(title,BorderLayout.CENTER);
         root.add(head, BorderLayout.NORTH);
 
@@ -188,7 +197,7 @@ public final class GameFrame extends JFrame {
         c.insets=new Insets(8,0,8,0);diceCard.add(rollButton,c);
         c.insets=new Insets(0,0,0,0);diceCard.add(passButton,c);
         c.weighty=1;diceCard.add(Box.createVerticalGlue(),c);
-        root.add(sideColumn(leftPlayers,diceCard),BorderLayout.WEST);
+        root.add(sideColumn(leftPlayers,diceCard),BorderLayout.LINE_START);
 
         // right side: players + the history of the game, as long as there is room
         JPanel historyCard=new UiKit.GlassCard(new BorderLayout(0,6));
@@ -197,10 +206,10 @@ public final class GameFrame extends JFrame {
         history.setLayout(new BoxLayout(history,BoxLayout.Y_AXIS));history.setOpaque(false);
         JPanel historyTop=UiKit.transparent(new BorderLayout());historyTop.add(history,BorderLayout.NORTH);
         JScrollPane log=new JScrollPane(historyTop,ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        log.setOpaque(false);log.getViewport().setOpaque(false);log.setBorder(null);
+        log.setOpaque(false);log.getViewport().setOpaque(false);log.setBorder(BorderFactory.createEmptyBorder());
         log.getVerticalScrollBar().setUnitIncrement(12);
         historyCard.add(log,BorderLayout.CENTER);
-        root.add(sideColumn(rightPlayers,historyCard),BorderLayout.EAST);
+        root.add(sideColumn(rightPlayers,historyCard),BorderLayout.LINE_END);
         return root;
     }
     /** One-line legend of the special squares under the board, drawn with the same pixel icons as the board. */
@@ -213,13 +222,17 @@ public final class GameFrame extends JFrame {
             d.setFont(Theme.font(12,Font.BOLD));
             FontMetrics fm=d.getFontMetrics();
             int gap=26, total=0;
-            for(String[] item:ITEMS) total+=22+fm.stringWidth(item[1]);
+            for(String[] item:ITEMS) total+=22+fm.stringWidth(Messages.get(item[1]));
             total+=gap*(ITEMS.length-1);
             int x=(getWidth()-total)/2, y=getHeight()/2;
+            if (!Theme.isDarkMode()) {
+                d.setColor(SECONDARY.color());
+                d.fillRoundRect(Math.max(0,x-7),0,Math.min(getWidth(),total+14),getHeight(),12,12);
+            }
             for(String[] item:ITEMS){
                 BoardPanel.paintLegendIcon(d,item[0],x+9,y,22);
-                d.setColor(Theme.MUTED);d.drawString(item[1],x+22,y+5);
-                x+=22+fm.stringWidth(item[1])+gap;
+                d.setColor(MUTED.color());d.drawString(Messages.get(item[1]),x+22,y+5);
+                x+=22+fm.stringWidth(Messages.get(item[1]))+gap;
             }
             d.dispose();
         }
@@ -235,7 +248,7 @@ public final class GameFrame extends JFrame {
             java.util.regex.Matcher m=EVENT.matcher(events.get(i));
             String turnNo=m.matches()?m.group(1):"", body=m.matches()?m.group(2):events.get(i);
             if(!turnNo.equals(lastTurn)){
-                JLabel head=Theme.label("TURN "+Integer.parseInt(turnNo.isEmpty()?"0":turnNo),10,Font.BOLD,Theme.GOLD);
+                JLabel head=Theme.label("TURN "+Integer.parseInt(turnNo.isEmpty()?"0":turnNo),10,Font.BOLD,ACCENT);
                 head.setBorder(new EmptyBorder(history.getComponentCount()==0?0:8,0,3,0));head.setAlignmentX(LEFT_ALIGNMENT);
                 history.add(head);lastTurn=turnNo;
             }
@@ -248,12 +261,20 @@ public final class GameFrame extends JFrame {
         Player who=null;
         for(Player p:session.players())                           // longest matching name wins ("Raghad K" before "Raghad")
             if((body.startsWith(p.name()+" ")||body.startsWith(p.name()+"'")) && (who==null||p.name().length()>who.name().length())) who=p;
-        String name=who==null?"":"<b style='color:"+hex(Theme.player(who.color()))+"'>"+esc(who.name())+"</b> ";
-        String rest=who==null?body:body.substring(who.name().length()).trim();
-        String text=describe(rest,body);
-        JLabel row=new JLabel("<html><div style='width:118px'>"+name+text+"</div></html>");
-        row.setFont(Theme.font(12,Font.PLAIN));row.setForeground(new Color(214,226,250));
-        row.setIcon(new Marker(who==null?Theme.GOLD:Theme.player(who.color())));row.setIconTextGap(7);
+        Player player = who;
+        String rest=player==null?body:body.substring(player.name().length()).trim();
+        JLabel row=new JLabel();
+        row.setFont(Theme.font(12,Font.PLAIN));Theme.foreground(row,TEXT);
+        Runnable update = () -> {
+            String name=player==null?"":"<b style='color:"+hex(Theme.playerText(player.color()).color())+"'>"+esc(player.name())+"</b> ";
+            String text=Messages.isHebrew() ? esc(Messages.get(body)) : name+describe(rest,body);
+            row.setText("<html><div dir='"+(Messages.isHebrew()?"rtl":"ltr")
+                    +"' style='width:118px;text-align:"+(Messages.isHebrew()?"right":"left")+"'>"+text+"</div></html>");
+            row.setIcon(new Marker(player==null?ACCENT.color():Theme.player(player.color())));
+        };
+        Theme.onAppearance(row, update);
+        Messages.bind(row, update);
+        row.setIconTextGap(7);
         row.setVerticalTextPosition(SwingConstants.TOP);row.setAlignmentX(LEFT_ALIGNMENT);
         row.setBorder(new EmptyBorder(2,0,4,0));
         return row;
@@ -264,18 +285,18 @@ public final class GameFrame extends JFrame {
         if(full.startsWith("New ")) return "<b>New game</b> "+esc(full.substring(4).replace(" game with ",", ").replace(".",""));
         if((m=java.util.regex.Pattern.compile("(?:used an immediate surprise UltraBoost and )?rolled Regular: (\\d+).*?(?:×(\\d+).*?)?Move: (\\d+)\\. (No legal move.*|Select.*)").matcher(rest)).find()){
             String roll="rolled <b>"+m.group(1)+"</b>"+(m.group(2)!=null?" ×"+m.group(2)+" = <b>"+m.group(3)+"</b>":"");
-            return roll+(m.group(4).startsWith("No")?" <span style='color:#ff9a9a'>— no move possible</span>":"");
+            return roll+(m.group(4).startsWith("No")?" <span style='color:" + hex(DANGER.color()) + "'>— no move possible</span>":"");
         }
-        if(rest.startsWith("has no legal move")) return "<span style='color:#ff9a9a'>passed the turn (no move)</span>";
+        if(rest.startsWith("has no legal move")) return "<span style='color:" + hex(DANGER.color()) + "'>passed the turn (no move)</span>";
         if((m=java.util.regex.Pattern.compile("entered the board with piece (\\d)(.*)").matcher(rest)).find())
             return "<b>"+hero(m.group(1))+"</b> left the castle"+extras(m.group(2));
         if((m=java.util.regex.Pattern.compile("moved piece (\\d) by (\\d+) squares(.*)").matcher(rest)).find())
             return "<b>"+hero(m.group(1))+"</b> moved "+m.group(2)+" squares"+extras(m.group(3));
-        if(rest.startsWith("answered ")) return "<span style='color:"+(rest.contains("incorrectly")?"#ff9a9a":"#8ff0c0")+"'>"+esc(rest)+"</span>";
-        if(full.startsWith("Surprise: ")) return "<b style='color:#c9a0ff'>Surprise!</b> "+esc(full.substring(10));
+        if(rest.startsWith("answered ")) return "<span style='color:"+hex((rest.contains("incorrectly")?DANGER:SUCCESS).color())+"'>"+esc(rest)+"</span>";
+        if(full.startsWith("Surprise: ")) return "<b style='color:" + hex(SURPRISE.color()) + "'>Surprise!</b> "+esc(full.substring(10));
         if(rest.startsWith("rolled three consecutive")) return "rolled three 6s in a row — roll canceled";
-        if(rest.startsWith("finished in place")) return "<b style='color:#ffd36b'>"+esc(rest)+"</b>";
-        if(full.startsWith("Game over")) return "<b style='color:#ffd36b'>"+esc(full)+"</b>";
+        if(rest.startsWith("finished in place")) return "<b style='color:" + hex(ACCENT.color()) + "'>"+esc(rest)+"</b>";
+        if(full.startsWith("Game over")) return "<b style='color:" + hex(ACCENT.color()) + "'>"+esc(full)+"</b>";
         return esc(rest);
     }
     /** Captures and reaching home, written after a move. */
@@ -289,9 +310,9 @@ public final class GameFrame extends JFrame {
                 if(victims.length()>0)victims.append(", ");
                 victims.append(pv.matches()?esc(pv.group(1))+"'s "+hero(pv.group(2)):esc(v.trim()));
             }
-            out.append(" and <b style='color:#ff9a9a'>captured ").append(victims).append("</b> — sent back to the castle");
+            out.append(" and <b style='color:" + hex(DANGER.color()) + "'>captured ").append(victims).append("</b> — sent back to the castle");
         }
-        if(tail.contains("reached HOME")) out.append(" and <b style='color:#ffd36b'>reached HOME ★</b>");
+        if(tail.contains("reached HOME")) out.append(" and <b style='color:" + hex(ACCENT.color()) + "'>reached HOME ★</b>");
         return out.toString();
     }
     private static String hero(String number){int n=Integer.parseInt(number)-1;return n>=0&&n<HERO_NAMES.length?HERO_NAMES[n]:"piece "+number;}
@@ -302,7 +323,7 @@ public final class GameFrame extends JFrame {
         public int getIconWidth(){return 18;} public int getIconHeight(){return 20;}
         public void paintIcon(Component c,Graphics g,int x,int y){
             Graphics2D d=(Graphics2D)g.create();d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            d.setColor(Color.WHITE);d.fillRoundRect(x+1,y,6,20,3,3);d.fillRoundRect(x+11,y,6,20,3,3);d.dispose();
+            d.setColor(TEXT.color());d.fillRoundRect(x+1,y,6,20,3,3);d.fillRoundRect(x+11,y,6,20,3,3);d.dispose();
         }
     }
     /** Small round marker in the player's colour at the start of a history line. */
@@ -322,14 +343,16 @@ public final class GameFrame extends JFrame {
         return column;
     }
     public void render(GameSession session){
-        boardPanel.setSession(session);modeLabel.setText("★  "+session.difficulty().label().toUpperCase()+"  ★");
-        turnCounter.setText("TURN  "+String.format("%02d",session.turn()));
-        Player player=session.current();turnLabel.setText("● "+player.name().toUpperCase());turnLabel.setForeground(Theme.player(player.color()));
-        phaseLabel.setText(switch(session.phase()){
+        boardPanel.setSession(session);Messages.set(modeLabel,"★  "+session.difficulty().label().toUpperCase()+"  ★");
+        Messages.set(turnCounter,"TURN  "+String.format("%02d",session.turn()));
+        Player player=session.current();
+        Messages.bind(turnLabel, () -> turnLabel.setText("● "+player.name()));
+        Theme.foreground(turnLabel,Theme.playerText(player.color()));
+        Messages.set(phaseLabel,switch(session.phase()){
             case ROLL->"ROLL THE DICE TO BEGIN YOUR TURN";
             case SELECT_PIECE->"CHOOSE A HIGHLIGHTED PIECE";
             case FINISHED->"GAME COMPLETED";
-        });phaseLabel.setForeground(session.phase()==GameSession.Phase.FINISHED?Theme.GOLD:Theme.SUCCESS);
+        });Theme.foreground(phaseLabel,session.phase()==GameSession.Phase.FINISHED?ACCENT:SUCCESS);
         rollButton.setEnabled(session.phase()==GameSession.Phase.ROLL);
         passButton.setEnabled(session.phase()==GameSession.Phase.SELECT_PIECE&&session.legalPieceIds().isEmpty());
         DiceRoll roll=session.dice();regularFace.setValue(roll==null?0:roll.regular());specialFace.setValue(roll==null?0:roll.special());
@@ -338,20 +361,27 @@ public final class GameFrame extends JFrame {
         specialFace.setVisible(showSpecial);
 
         String boost=(roll != null && roll.ultraBoost()) || session.difficulty() == Difficulty.HARD ? "ULTRABOOST" : "BOOST";
-        specialDieLabel.setText(showSpecial && roll != null ? boost+"  ×"+roll.multiplier() : boost);   // multiplier shown next to its die
+        Messages.set(specialDieLabel,showSpecial && roll != null ? boost+"  ×"+roll.multiplier() : boost);   // multiplier shown next to its die
         multiplier.setText(showSpecial && roll != null ? "×" + roll.multiplier() : "");
-        diceDetails.setText(roll==null ? "READY TO ROLL" : "SHARED " + roll.movement() + "  |  HOME " + roll.regular());
+        Messages.set(diceDetails,roll==null ? "READY TO ROLL" : "SHARED " + roll.movement() + "  |  HOME " + roll.regular());
         resultValue.setText(roll == null ? "–" : Integer.toString(roll.regular()));
-        movementValue.setText(availableMovesText(session));
+        Messages.bind(movementValue, () -> movementValue.setText(localizeMoves(availableMovesText(session))));
 
         // a single message for the player: what to do now, and how far the dice let them move
-        String text; Color color;
-        if (session.phase() == GameSession.Phase.FINISHED) { text = "Game completed!"; color = Theme.GOLD; }
-        else if (session.phase() == GameSession.Phase.ROLL) { text = "Roll the dice!"; color = Theme.GOLD; }
-        else if (session.legalPieceIds().isEmpty()) { text = "No legal moves. Pass your turn."; color = new Color(255,150,150); }
-        else { text = "Move "+availableMovesText(session).toLowerCase()+". Pick a glowing hero."; color = Theme.SUCCESS; }
-        instruction.setText(text);instruction.setForeground(color);
-        wrap(instruction,135);
+        String text; Theme.Tone color;
+        if (session.phase() == GameSession.Phase.FINISHED) { text = "Game completed!"; color = ACCENT; }
+        else if (session.phase() == GameSession.Phase.ROLL) { text = "Roll the dice!"; color = ACCENT; }
+        else if (session.legalPieceIds().isEmpty()) { text = "No legal moves. Pass your turn."; color = DANGER; }
+        else { text = null; color = SUCCESS; }
+        Messages.bind(instruction, () -> {
+            String moves=availableMovesText(session);
+            instruction.setText(text == null
+                    ? Messages.get("Move "+(Messages.isHebrew()?localizeMoves(moves):moves.toLowerCase(java.util.Locale.ROOT))
+                            +". Pick a glowing hero.")
+                    : Messages.get(text));
+            wrap(instruction,135);
+        });
+        Theme.foreground(instruction,color);
 
         updateHistory(session);
         updatePlayers(session);
@@ -361,7 +391,6 @@ public final class GameFrame extends JFrame {
         arenaRepaint();
     }
     /** Lets a centred label wrap onto two lines instead of being cut with "...". */
-    private static void wrap(JLabel label){wrap(label,125);}
     private static void wrap(JLabel label,int width){
         String t=label.getText();
         if(!t.startsWith("<html>")) label.setText("<html><p style='width:"+width+"px' align=center>"+t+"</p></html>");
@@ -405,8 +434,19 @@ public final class GameFrame extends JFrame {
             add(card);
         }
         void focusResume(){SwingUtilities.invokeLater(resume::requestFocusInWindow);}
+        private Rectangle headerBounds() {
+            return SwingUtilities.convertRectangle(header, new Rectangle(header.getSize()), this);
+        }
+        @Override public boolean contains(int x,int y) {
+            return !headerBounds().contains(x,y) && super.contains(x,y);
+        }
         @Override protected void paintComponent(Graphics g){
-            g.setColor(new Color(4,12,40,175));g.fillRect(0,0,getWidth(),getHeight());super.paintComponent(g);
+            Rectangle bounds=headerBounds();
+            g.setColor(SCRIM.color());
+            g.fillRect(0,0,getWidth(),bounds.y);
+            int bottom=bounds.y+bounds.height;
+            g.fillRect(0,bottom,getWidth(),getHeight()-bottom);
+            super.paintComponent(g);
         }
     }
     private void updateClock(){
@@ -414,7 +454,7 @@ public final class GameFrame extends JFrame {
         long now=System.currentTimeMillis(), pausedNow=paused?now-pauseStartedAt:0;
         long seconds=Math.max(0,(now-clockSession.started().toEpochMilli()-pausedMillis-pausedNow)/1000);
         long h=seconds/3600,m=(seconds%3600)/60,sec=seconds%60;
-        clockLabel.setText(h>0?String.format("TIME  %d:%02d:%02d",h,m,sec):String.format("TIME  %02d:%02d",m,sec));
+        Messages.set(clockLabel,h>0?String.format("TIME  %d:%02d:%02d",h,m,sec):String.format("TIME  %02d:%02d",m,sec));
     }
     private void arenaRepaint(){screens.revalidate();screens.repaint();}
     private String availableMovesText(GameSession session) {
@@ -436,6 +476,10 @@ public final class GameFrame extends JFrame {
         if (exit) options.add("EXIT");
         String result = options.toString();
         return result.isEmpty() ? "NO LEGAL MOVES" : result;
+    }
+    private String localizeMoves(String text) {
+        return java.util.Arrays.stream(text.split(" / ")).map(Messages::get)
+                .collect(java.util.stream.Collectors.joining(" / "));
     }
     private void updatePlayers(GameSession session){
         leftPlayers.removeAll();rightPlayers.removeAll();
@@ -464,22 +508,22 @@ public final class GameFrame extends JFrame {
             d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             int w=getWidth()-4,h=getHeight()-6,top=6;
             Color team=Theme.player(player.color());
-            d.setColor(new Color(4,15,53,82));d.fill(new RoundRectangle2D.Double(1,top+4,w,h-2,16,16));
-            d.setColor(new Color(24,57,132,225));d.fill(new RoundRectangle2D.Double(0,top,w,h-2,16,16));
-            d.setColor(active?team:new Color(82,135,229,125));d.setStroke(new BasicStroke(active?3f:1f));
+            d.setColor(SHADOW.color());d.fill(new RoundRectangle2D.Double(1,top+4,w,h-2,16,16));
+            d.setColor(SURFACE.color());d.fill(new RoundRectangle2D.Double(0,top,w,h-2,16,16));
+            d.setColor(active?team:BORDER.color());d.setStroke(new BasicStroke(active?3f:1f));
             d.draw(new RoundRectangle2D.Double(1,top+1,w-2,h-4,16,16));
             // name ribbon
             d.setColor(team);d.fill(new RoundRectangle2D.Double(10,top+8,w-20,24,10,10));
-            d.setColor(Color.WHITE);d.setFont(Theme.font(13,Font.BOLD));
+            d.setColor(Theme.teamInk(team));d.setFont(Theme.font(13,Font.BOLD));
             String name=player.name();FontMetrics fm=d.getFontMetrics();
             int maxName=active?w-110:w-40;
             while(fm.stringWidth(name)>maxName && name.length()>3) name=name.substring(0,name.length()-2)+"…";
             d.drawString(name,20,top+25);
             if(active){                                                                   // "YOUR TURN" tag on the ribbon
                 d.setFont(Theme.font(10,Font.BOLD));
-                int tw=d.getFontMetrics().stringWidth("YOUR TURN")+14, tx=w-14-tw;
+                int tw=d.getFontMetrics().stringWidth(Messages.get("YOUR TURN"))+14, tx=w-14-tw;
                 d.setColor(Color.WHITE);d.fill(new RoundRectangle2D.Double(tx,top+11,tw,18,9,9));
-                d.setColor(team);d.drawString("YOUR TURN",tx+7,top+24);
+                d.setColor(team);d.drawString(Messages.get("YOUR TURN"),tx+7,top+24);
             }
             // the four heroes
             double slot=(w-20)/4.0;
@@ -493,11 +537,12 @@ public final class GameFrame extends JFrame {
                 if(out) d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,.3f));    // left the castle: shown switched off
                 d.drawImage(img,(int)Math.round(cx-32),(int)Math.round(cy-32),null);
                 d.setComposite(old);
-                if(home){d.setColor(Theme.GOLD);d.setFont(Theme.font(15,Font.BOLD));d.drawString("★",(int)cx-6,(int)cy+6);}
+                if(home){d.setColor(ACCENT.color());d.setFont(Theme.font(15,Font.BOLD));d.drawString("★",(int)cx-6,(int)cy+6);}
             }
             // counts
-            d.setFont(Theme.font(10,Font.BOLD));d.setColor(Theme.MUTED);
+            d.setFont(Theme.font(10,Font.BOLD));d.setColor(MUTED.color());
             String counts=player.finishedCount()+"/4 HOME   •   "+player.castleCount()+" IN CASTLE";
+            counts=Messages.get(counts);
             d.drawString(counts,(w-d.getFontMetrics().stringWidth(counts))/2,top+h-9);
             d.dispose();
         }
@@ -515,7 +560,7 @@ public final class GameFrame extends JFrame {
         JPanel scores=UiKit.transparent(new GridLayout(session.ranking().size(),1,0,8));int rank=1;
         for(PlayerColor color:session.ranking()){
             JLabel line=Theme.label("#"+rank+"     "+session.findPlayer(color).name()+"   •   "+color.label().toUpperCase()+
-                         (rank==1?"   ★ WINNER":""),15,Font.BOLD,rank==1?Theme.GOLD:Theme.WHITE);
+                         (rank==1?"   ★ WINNER":""),15,Font.BOLD,rank==1?ACCENT:TEXT);
             scores.add(line);rank++;
         }
         board.add(scores,BorderLayout.CENTER);board.add(UiKit.sub(persistenceMessage),BorderLayout.SOUTH);
@@ -526,34 +571,38 @@ public final class GameFrame extends JFrame {
         again.addActionListener(e->{dialog.dispose();if(actions!=null)actions.newGame();});
         menu.addActionListener(e->{dialog.dispose();if(actions!=null)actions.showMenu();});
         controls.add(again);controls.add(menu);root.add(controls,BorderLayout.SOUTH);
-        dialog.setContentPane(root);dialog.setSize(570,500);dialog.setLocationRelativeTo(this);
+        GlobalHeader.install(dialog,root);dialog.setSize(570,540);dialog.setLocationRelativeTo(this);
         dialog.setVisible(true);
     }
     public void showInfo(String heading,String message){
-        JTextArea area=UiKit.area(message,16);area.setEditable(false);
+        JTextArea area=UiKit.area("",16);Messages.set(area,message);area.setEditable(false);
         JScrollPane s=new JScrollPane(area);s.setPreferredSize(new Dimension(625,380));
-        JOptionPane.showMessageDialog(this,s,heading,JOptionPane.INFORMATION_MESSAGE);
+        Dialogs.showMessageDialog(this,s,heading,JOptionPane.INFORMATION_MESSAGE);
     }
     public void showSurprise(String message){
         UiKit.notice(this,"SURPRISE EFFECT","✦  SURPRISE SQUARE  ✦",message,"APPLY SURPRISE EFFECT  →");
     }
-    public void showError(Exception ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"CHEETAH LUDO  •  ERROR",JOptionPane.ERROR_MESSAGE);}
+    public void showError(Exception ex){Dialogs.showMessageDialog(this,ex.getMessage(),"CHEETAH LUDO  •  ERROR",JOptionPane.ERROR_MESSAGE);}
+    private static <T extends AbstractButton> T localizedMenu(T item, String text) {
+        Messages.set(item,text);
+        return item;
+    }
     private void buildMenu(){
-        JMenuBar b=new JMenuBar();JMenu game=new JMenu("Game");
-        homeMenuItem = new JMenuItem("Main Menu");
+        JMenuBar b=new JMenuBar();JMenu game=localizedMenu(new JMenu(),"Game");
+        homeMenuItem = localizedMenu(new JMenuItem(),"Main Menu");
         homeMenuItem.addActionListener(e -> { if (actions != null) actions.showMenu(); });
         game.add(homeMenuItem);
-        newGameMenuItem = new JMenuItem("New Game");
+        newGameMenuItem = localizedMenu(new JMenuItem(),"New Game");
         newGameMenuItem.setAccelerator(KeyStroke.getKeyStroke(
                 KeyEvent.VK_N, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
         newGameMenuItem.addActionListener(e -> {
             if (actions != null && !adminMode) actions.newGame();
         });
         game.add(newGameMenuItem);
-        JMenuItem hist=new JMenuItem("History");hist.addActionListener(e->{if(actions!=null)actions.history();});game.add(hist);
-        JMenuItem exp=new JMenuItem("Export History");exp.addActionListener(e->{if(actions!=null)actions.exportHistory();});game.add(exp);
-        JMenuItem exit=new JMenuItem("Exit");exit.addActionListener(e->dispose());game.add(exit);
-        JMenu help=new JMenu("Help");JMenuItem rules=new JMenuItem("Rules & Controls");
+        JMenuItem hist=localizedMenu(new JMenuItem(),"History");hist.addActionListener(e->{if(actions!=null)actions.history();});game.add(hist);
+        JMenuItem exp=localizedMenu(new JMenuItem(),"Export History");exp.addActionListener(e->{if(actions!=null)actions.exportHistory();});game.add(exp);
+        JMenuItem exit=localizedMenu(new JMenuItem(),"Exit");exit.addActionListener(e->dispose());game.add(exit);
+        JMenu help=localizedMenu(new JMenu(),"Help");JMenuItem rules=localizedMenu(new JMenuItem(),"Rules & Controls");
         rules.addActionListener(e -> { if (!isCapturePlaying()) showRules(); });
         help.add(rules);b.add(game);b.add(help);setJMenuBar(b);
     }
@@ -577,10 +626,10 @@ public final class GameFrame extends JFrame {
         void setValue(int v){value=v;repaint();}
         @Override protected void paintComponent(Graphics g){
             Graphics2D d=(Graphics2D)g.create();d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            d.setColor(new Color(0,0,0,45));d.fillRoundRect(5,6,55,55,13,13);
-            d.setPaint(new GradientPaint(0,0,new Color(255,255,255),55,55,new Color(195,227,255)));
-            d.fillRoundRect(2,1,55,55,12,12);d.setColor(new Color(76,149,235));d.setStroke(new BasicStroke(2));d.drawRoundRect(2,1,55,55,12,12);
-            d.setColor(new Color(24,87,196));
+            d.setColor(SHADOW.color());d.fillRoundRect(5,6,55,55,13,13);
+            d.setPaint(new GradientPaint(0,0,new Color(255,255,255),55,55,Theme.blend(PRIMARY.color(),Color.WHITE,.24f)));
+            d.fillRoundRect(2,1,55,55,12,12);d.setColor(ACCENT.color());d.setStroke(new BasicStroke(2));d.drawRoundRect(2,1,55,55,12,12);
+            d.setColor(ON_PRIMARY.color());
             if(value<=0){d.setFont(Theme.font(25,Font.BOLD));d.drawString("?",21,37);}
             else{int[][] pts={{15,14},{29,14},{43,14},{15,28},{29,28},{43,28},{15,42},{29,42},{43,42}};
                  int[][] index={{4},{0,8},{0,4,8},{0,2,6,8},{0,2,4,6,8},{0,2,3,5,6,8}};
@@ -595,7 +644,7 @@ public final class GameFrame extends JFrame {
 
     public void setAdminMode(boolean enabled) {
         adminMode = enabled;
-        homeMenuItem.setText(enabled ? "Admin Dashboard" : "Main Menu");
+        Messages.set(homeMenuItem,enabled ? "Admin Dashboard" : "Main Menu");
         newGameMenuItem.setEnabled(!enabled);
         if (!enabled) dashboard.setEmail(null);
         showMainMenu();

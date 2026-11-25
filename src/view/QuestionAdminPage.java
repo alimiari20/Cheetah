@@ -1,5 +1,7 @@
 package view;
 
+import static view.Theme.Tone.*;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
@@ -15,15 +17,25 @@ import java.util.function.Consumer;
 /** Editable question administration screen; validation and persistence stay in service/controller. */
 public final class QuestionAdminPage extends MenuStyle.Page {
     private final DefaultListModel<Question> entries=new DefaultListModel<>();
-    private final JList<Question> list=new JList<>(entries);
+    private final JList<Question> list=new JList<>(entries) {
+        @Override public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override public String getToolTipText(java.awt.event.MouseEvent event) {
+            int index=locationToIndex(event.getPoint());
+            return index>=0 && getCellBounds(index,index).contains(event.getPoint())
+                    ? entries.get(index).text() : null;
+        }
+    };
     private final JTextField search=UiKit.field("");
     private final JTextField category=UiKit.field("Software Engineering");
     private final JTextArea prompt=UiKit.area("",3),explanation=UiKit.area("",2);
     private final JTextField[] options=new JTextField[4];
     private final JComboBox<Difficulty> difficulty=new JComboBox<>(Difficulty.values());
     private final JComboBox<String> correct=new JComboBox<>(new String[]{"Option A","Option B","Option C","Option D"});
-    private final JLabel total=MenuStyle.label("QUESTION BANK",12,Font.BOLD,MenuStyle.GOLD);
-    private final JLabel note=MenuStyle.label("Minimum: 30 questions enforced",11,Font.BOLD,MenuStyle.MUTED);
+    private final JLabel total=MenuStyle.label("QUESTION BANK",12,Font.BOLD,ACCENT);
+    private final JLabel note=MenuStyle.label("Minimum: 30 questions enforced",11,Font.BOLD,MUTED);
     private final Consumer<Question> saveAction;
     private final Consumer<String> deleteAction;
     private List<Question> all=List.of();
@@ -34,10 +46,10 @@ public final class QuestionAdminPage extends MenuStyle.Page {
         setBorder(new EmptyBorder(17,28,19,28));
         JPanel header=UiKit.transparent(new BorderLayout(12,0));
         JButton returnButton=MenuStyle.button("← DASHBOARD",false,back);
-        header.add(returnButton,BorderLayout.WEST);
+        header.add(returnButton,BorderLayout.LINE_START);
         JPanel heading=UiKit.transparent(new GridLayout(2,1,0,4));
-        heading.add(MenuStyle.label("Question Management",26,Font.BOLD,MenuStyle.TEXT));
-        heading.add(MenuStyle.label("Search, add, and edit the question bank",13,Font.PLAIN,MenuStyle.MUTED));
+        heading.add(MenuStyle.label("Question Management",26,Font.BOLD,TEXT));
+        heading.add(MenuStyle.label("Search, add, and edit the question bank",13,Font.PLAIN,MUTED));
         header.add(heading,BorderLayout.CENTER);
         add(header,BorderLayout.NORTH);
         JPanel content=UiKit.transparent(new GridBagLayout());
@@ -51,37 +63,45 @@ public final class QuestionAdminPage extends MenuStyle.Page {
             public void insertUpdate(DocumentEvent e){filter();}public void removeUpdate(DocumentEvent e){filter();}
             public void changedUpdate(DocumentEvent e){filter();}
         });
+        Messages.renderCombo(difficulty);
+        Messages.renderCombo(correct);
         beginNew();
     }
     private JPanel buildListPane(){
         JPanel outer=MenuStyle.card(new BorderLayout(0,11),15);
         JPanel header=UiKit.transparent(new BorderLayout(0,7));header.add(total,BorderLayout.NORTH);
-        search.setToolTipText("Filter by category, difficulty or question text");
-        search.getAccessibleContext().setAccessibleName("Search questions");
+        Messages.bind(search, () -> {
+            search.setToolTipText(Messages.get("Filter by category, difficulty or question text"));
+            search.getAccessibleContext().setAccessibleName(Messages.get("Search questions"));
+        });
         MenuStyle.field(search);
         header.add(search,BorderLayout.CENTER);header.add(note,BorderLayout.SOUTH);
         outer.add(header,BorderLayout.NORTH);
-        list.setBackground(MenuStyle.MIDNIGHT);list.setForeground(MenuStyle.TEXT);
-        list.setSelectionBackground(MenuStyle.BORDER);list.setSelectionForeground(MenuStyle.TEXT);
+        Theme.background(list,BACKGROUND);Theme.foreground(list,TEXT);
+        Theme.listSelection(list);
         list.setFixedCellHeight(66);list.setFont(Theme.font(12,Font.BOLD));
+        list.setToolTipText("");
         list.setCellRenderer((lst,q,index,selected,focus)->{
             JPanel row=UiKit.transparent(new BorderLayout(0,3));row.setBorder(new EmptyBorder(8,11,8,8));
-            row.setOpaque(true);row.setBackground(selected?MenuStyle.BORDER:MenuStyle.MIDNIGHT);
+            row.setOpaque(true);row.setBackground((selected?SECONDARY:BACKGROUND).color());
             String text=q.text().replaceAll("\\s+"," ");if(text.length()>86)text=text.substring(0,83)+"…";
-            row.add(MenuStyle.label(text,12,Font.BOLD,MenuStyle.TEXT),BorderLayout.CENTER);
-            row.add(MenuStyle.label(q.difficulty().name()+"   •   "+q.category(),10,Font.PLAIN,MenuStyle.MUTED),BorderLayout.SOUTH);
+            JLabel promptLabel=new JLabel(text);promptLabel.setFont(Theme.font(12,Font.BOLD));Theme.foreground(promptLabel,TEXT);
+            row.add(promptLabel,BorderLayout.CENTER);
+            row.add(MenuStyle.label(Messages.get(q.difficulty().name())+"   •   "+q.category(),10,Font.PLAIN,MUTED),BorderLayout.SOUTH);
             return row;
         });
-        JScrollPane scroll=new JScrollPane(list);scroll.setBorder(BorderFactory.createEmptyBorder());
+        JScrollPane scroll=new JScrollPane(list);
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         outer.add(scroll,BorderLayout.CENTER);
         return outer;
     }
     private JPanel buildEditor(){
         JPanel outer=MenuStyle.card(new BorderLayout(0,12),16);
-        JPanel upper=UiKit.transparent(new BorderLayout(8,0));upper.add(label("ADD / EDIT QUESTION"),BorderLayout.WEST);
+        JPanel upper=UiKit.transparent(new BorderLayout(8,0));upper.add(label("ADD / EDIT QUESTION"),BorderLayout.LINE_START);
         JButton add=MenuStyle.button("+ NEW QUESTION",false,this::beginNew);
-        upper.add(add,BorderLayout.EAST);
+        upper.add(add,BorderLayout.LINE_END);
         outer.add(upper,BorderLayout.NORTH);
         JPanel form=UiKit.transparent();form.setLayout(new BoxLayout(form,BoxLayout.Y_AXIS));
         form.add(label("DIFFICULTY"));form.add(difficulty);form.add(Box.createVerticalStrut(6));
@@ -93,25 +113,25 @@ public final class QuestionAdminPage extends MenuStyle.Page {
         form.add(label("CORRECT ANSWER"));form.add(correct);form.add(Box.createVerticalStrut(6));
         form.add(label("EXPLANATION"));form.add(scroll(explanation,62));
         JScrollPane formScroll=new JScrollPane(form);formScroll.setOpaque(false);formScroll.getViewport().setOpaque(false);
-        formScroll.setBorder(null);formScroll.getVerticalScrollBar().setUnitIncrement(16);
+        formScroll.setBorder(BorderFactory.createEmptyBorder());formScroll.getVerticalScrollBar().setUnitIncrement(16);
         outer.add(formScroll,BorderLayout.CENTER);
         JPanel buttons=UiKit.transparent(new GridLayout(1,2,10,0));
         JButton delete=MenuStyle.button("DELETE",false),save=MenuStyle.button("SAVE QUESTION",true,this::save);
         delete.addActionListener(e->{
-            if(editId==null){JOptionPane.showMessageDialog(this,"Select an existing question to delete.");return;}
-            if(all.size()<=30){JOptionPane.showMessageDialog(this,"Cannot delete: the bank must contain at least 30 questions.");return;}
-            int answer=JOptionPane.showConfirmDialog(this,"Delete this question? This cannot be undone.","Confirm deletion",JOptionPane.YES_NO_OPTION);
+            if(editId==null){Dialogs.showMessageDialog(this,"Select an existing question to delete.");return;}
+            if(all.size()<=30){Dialogs.showMessageDialog(this,"Cannot delete: the bank must contain at least 30 questions.");return;}
+            int answer=Dialogs.showConfirmDialog(this,"Delete this question? This cannot be undone.","Confirm deletion",JOptionPane.YES_NO_OPTION);
             if(answer==JOptionPane.YES_OPTION)deleteAction.accept(editId);
         });
         buttons.add(delete);buttons.add(save);outer.add(buttons,BorderLayout.SOUTH);
         return outer;
     }
-    private JLabel label(String t){JLabel l=MenuStyle.label(t,12,Font.BOLD,MenuStyle.GOLD);l.setAlignmentX(Component.LEFT_ALIGNMENT);return l;}
+    private JLabel label(String t){JLabel l=MenuStyle.label(t,12,Font.BOLD,ACCENT);l.setAlignmentX(Component.LEFT_ALIGNMENT);return l;}
     private JScrollPane scroll(JTextArea area,int height){JScrollPane sc=new JScrollPane(area);sc.setPreferredSize(new Dimension(150,height));
-       sc.setMaximumSize(new Dimension(Integer.MAX_VALUE,height));sc.setBorder(BorderFactory.createLineBorder(Theme.LINE));return sc;}
+       sc.setMaximumSize(new Dimension(Integer.MAX_VALUE,height));Theme.lineBorder(sc,null);return sc;}
     public void showQuestions(List<Question> questions){
-        this.all=List.copyOf(questions);total.setText("QUESTION BANK  •  "+all.size()+" QUESTIONS");
-        note.setText(all.size()==30?"Minimum 30: deletion disabled":"Minimum 30 • "+(all.size()-30)+" above minimum");
+        this.all=List.copyOf(questions);Messages.set(total,"QUESTION BANK  •  "+all.size()+" QUESTIONS");
+        Messages.set(note,all.size()==30?"Minimum 30: deletion disabled":"Minimum 30 • "+(all.size()-30)+" above minimum");
         filter();
     }
     private void filter(){
