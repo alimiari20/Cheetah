@@ -36,10 +36,14 @@ public final class GameController
     private final GameEngine engine;
 
     private final HistoryRepository history;
+    private final ReplayRepository replays;
+    private ReplayRecorder recorder;
+    private long replayRequest;
 
     private final Random random;
     private final Random aiRandom = new Random();
     private final Map<PlayerColor, AiLevel> playerControls = new EnumMap<>(PlayerColor.class);
+    private final Map<Integer, AiLevel> delegatedEffects = new HashMap<>();
     private final javax.swing.Timer aiDelay = new javax.swing.Timer(550, event -> runAiTurn());
     private int actionDepth;
 
@@ -93,6 +97,7 @@ public final class GameController
         this.engine = Objects.requireNonNull(engine);
 
         this.history = Objects.requireNonNull(history);
+        this.replays = new ReplayRepository(history);
 
         this.random = Objects.requireNonNull(random);
         aiDelay.setRepeats(false);
@@ -131,7 +136,7 @@ public final class GameController
 
             SetupDialog.Config config,
 
-            int firstPlayer) {
+            int firstPlayer, List<String> openingRolls) {
 
         session = engine.startNewGame(
 
@@ -171,10 +176,12 @@ public final class GameController
 
         matchSaved = false;
         playerControls.clear();
+        delegatedEffects.clear();
         for (int i = 0; i < config.colors().size(); i++) {
             playerControls.put(config.colors().get(i), config.controls().get(i));
         }
         view.setPlayerControls(playerControls);
+        recorder = new ReplayRecorder(session, playerControls, openingRolls);
         
 
 selectingOpponentPiece = false;
@@ -272,7 +279,7 @@ view.setOpponentSelectionIds(Set.of());
 
         tryAction(() -> {
 
-            int first = FirstPlayerDialog.chooseStarter(
+            var selection = FirstPlayerDialog.chooseRecordedStarter(
 
                 view,
 
@@ -286,9 +293,11 @@ view.setOpponentSelectionIds(Set.of());
 
             );
 
-            if (first >= 0) {
+            if (selection.starter() >= 0) {
 
-                startSession(config, first);
+                var rolls = selection.rolls().stream()
+                        .map(roll -> "First-player roll: " + roll.player() + " rolled " + roll.die() + ".").toList();
+                startSession(config, selection.starter(), rolls);
 
                 view.showGame();
 
@@ -344,10 +353,20 @@ view.setOpponentSelectionIds(Set.of());
         return playerControls.getOrDefault(color, AiLevel.HUMAN);
     }
 
+    private AiLevel effectControl(PlayerColor color) {
+        return delegatedEffects.getOrDefault(session.temporaryEffectDepth(), control(color));
+    }
+
+    private void completeTurnEffect() {
+        engine.completeMove(session);
+        delegatedEffects.keySet().removeIf(depth -> depth > session.temporaryEffectDepth());
+        recorder.record(Replay.Kind.TURN);
+    }
+
     private AiLevel activeControl() {
         if (session == null) return AiLevel.HUMAN;
         Piece trigger = selectingOpponentPiece ? session.findPiece(pendingSurprisePieceId) : null;
-        return control(trigger == null ? session.current().color() : trigger.color());
+        return effectControl(trigger == null ? session.current().color() : trigger.color());
     }
 
     private boolean readyForAi() {
@@ -357,6 +376,7 @@ view.setOpponentSelectionIds(Set.of());
     }
 
     @Override public void gameAvailabilityChanged() {
+        if (!view.isHistoryVisible()) replayRequest++;
         aiDelay.stop();
         if (readyForAi()) aiDelay.restart();
     }
@@ -691,7 +711,8 @@ view.setOpponentSelectionIds(Set.of());
 
             }
 
-            engine.roll(session, random);
+            recorder.roll(engine.roll(session, random));
+            delegatedEffects.keySet().removeIf(depth -> depth > session.temporaryEffectDepth());
 
             refresh();
 
@@ -716,6 +737,8 @@ view.setOpponentSelectionIds(Set.of());
         tryAction(() -> {
 
             engine.pass(session);
+            delegatedEffects.keySet().removeIf(depth -> depth > session.temporaryEffectDepth());
+            recorder.record(Replay.Kind.PASS);
 
             refresh();
 
@@ -764,7 +787,7 @@ if (selectingOpponentPiece) {
 
                 engine.move(session, pieceId);
 
-            refreshCapture(before);
+            refreshCapture(before, Replay.Kind.MOVE, null, null, 0);
 
 
             resolveSpecial(pieceId, move.squareId());
@@ -774,7 +797,7 @@ if (selectingOpponentPiece) {
 }
 
 
-engine.completeMove(session);
+completeTurnEffect();
 refresh();
 postMatchCheck();
 
@@ -802,6 +825,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
         return;
     }
 
+    AiLevel initiator = activeControl();
     int die = random.nextInt(6) + 1;
 
     OpponentBackwardCommand command =
@@ -819,7 +843,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
     pendingSurprisePieceId = null;
     view.setOpponentSelectionIds(Set.of());
 
-    refreshCapture(before);
+    refreshCapture(before, Replay.Kind.OPPONENT, null, SurpriseOutcome.OPPONENT_BACKWARD, die);
 
     resolvingDialog = true;
     try {
@@ -829,7 +853,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
                 + opponent.color().label()
                 + " piece " + (opponent.number() + 1)
                 + " moved " + Math.abs(result.steps())
-                + " squares backward.", activeControl().automated()
+                + " squares backward.", initiator.automated()
         );
     } finally {
         resolvingDialog = false;
@@ -841,6 +865,11 @@ private void resolveOpponentSelection(String opponentPieceId) {
                 && ("question".equals(landing.symbol())
                     || "surprise".equals(landing.symbol()))) {
             engine.beginOpponentEffect(session, opponentPieceId);
+            if (initiator.automated()) {
+                // A forced chain belongs to the AI that triggered it, even on a human's piece.
+                delegatedEffects.put(session.temporaryEffectDepth(), initiator);
+            }
+            recorder.record(Replay.Kind.TURN);
         }
     }
     if (opponentMoved) {
@@ -869,7 +898,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
 
  // Complete the current effect.
  // GameEngine handles earned rolls and suspended turns.
- engine.completeMove(session);
+ completeTurnEffect();
 
  refresh();
  postMatchCheck();
@@ -939,17 +968,17 @@ private void resolveSpecial(
 
             resolvingDialog = true;
 
-            boolean correct;
+            QuestionDialog.Result answerResult;
 
             try {
 
-                AiLevel level = control(piece.color());
+                AiLevel level = effectControl(piece.color());
                 if (level.automated()) {
                     int answer = AiMoveStrategy.answer(level, question.difficulty(), question.text(),
                             question.choices(), aiRandom);
-                    correct = QuestionDialog.ask(view, question, answer);
+                    answerResult = QuestionDialog.askRecorded(view, question, answer);
                 } else {
-                    correct = QuestionDialog.ask(view, question);
+                    answerResult = QuestionDialog.askRecorded(view, question, -1);
                 }
 
             } finally {
@@ -957,6 +986,7 @@ private void resolveSpecial(
                 resolvingDialog = false;
 
             }
+            boolean correct = answerResult.correct();
 
             CaptureMove.Before before = CaptureMove.observe(session, pieceId);
             if (piece.color() != session.current().color()) {
@@ -975,7 +1005,8 @@ private void resolveSpecial(
                 );
             }
 
-            refreshCapture(before);
+            refreshCapture(before, Replay.Kind.QUESTION,
+                    new Replay.Answer(question, answerResult.selected(), correct), null, 0);
 
             Piece updated = session.findPiece(pieceId);
             if (updated != null
@@ -994,18 +1025,21 @@ private void resolveSpecial(
 
     if (outcome == SurpriseOutcome.OPPONENT_BACKWARD) {
         beginOpponentSelection(pieceId);
+        recorder.note(selectingOpponentPiece ? "Opponent selection started."
+                : "No eligible opponent piece. Surprise canceled.");
+        recorder.record(Replay.Kind.SURPRISE,null,null,outcome,0);
 
         resolvingDialog = true;
         try {
             if (selectingOpponentPiece) {
                 view.showSurprise(
-                    control(piece.color()).automated() ? "AI is choosing an opponent piece."
+                    effectControl(piece.color()).automated() ? "AI is choosing an opponent piece."
                             : "Choose a red highlighted opponent piece on the board.",
-                    control(piece.color()).automated()
+                    effectControl(piece.color()).automated()
                 );
             } else {
                 view.showSurprise(
-                    "No eligible opponent piece. Surprise canceled.", control(piece.color()).automated()
+                    "No eligible opponent piece. Surprise canceled.", effectControl(piece.color()).automated()
                 );
             }
         } finally {
@@ -1018,11 +1052,11 @@ private void resolveSpecial(
     GameEngine.SurpriseFeedback feedback =
             engine.applySurprise(session, pieceId, outcome, random);
 
-    refreshCapture(before);
+    refreshCapture(before, Replay.Kind.SURPRISE, null, outcome, 0);
 
     resolvingDialog = true;
     try {
-        view.showSurprise(feedback.message(), control(piece.color()).automated());
+        view.showSurprise(feedback.message(), effectControl(piece.color()).automated());
     } finally {
         resolvingDialog = false;
     }
@@ -1058,7 +1092,12 @@ private void resolveSpecial(
 
         try {
 
-            history.save(session);
+            var entry = history.save(session);
+            try {
+                replays.save(entry, recorder.complete());
+            } catch (IOException | RuntimeException ex) {
+                info = "Game saved, but its replay could not be saved.";
+            }
 
         } catch (IOException ex) {
 
@@ -1083,11 +1122,8 @@ private void resolveSpecial(
 
             try {
 
-                view.showHistory(
-
-                    history.readEntries()
-
-                );
+                var entries = history.readEntries();
+                view.showHistory(entries, replays.available(entries));
 
             } catch (IOException ex) {
 
@@ -1196,8 +1232,30 @@ private void resolveSpecial(
 
     }
 
-    private void refreshCapture(CaptureMove.Before before) {
+    @Override public void watchReplay(HistoryRepository.Entry entry) {
+        if (!view.isHistorySelection(entry)) return;
+        long request = ++replayRequest;
+        new SwingWorker<Optional<Replay>,Void>() {
+            @Override protected Optional<Replay> doInBackground() { return replays.load(entry); }
+            @Override protected void done() {
+                if (request != replayRequest || !view.isHistorySelection(entry)) return;
+                try {
+                    var replay = get();
+                    if (replay.isPresent()) view.showReplay(replay.get());
+                    else view.markReplayUnavailable(entry.gameId());
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    view.markReplayUnavailable(entry.gameId());
+                }
+            }
+        }.execute();
+    }
+
+    private void refreshCapture(CaptureMove.Before before, Replay.Kind kind,
+                                Replay.Answer answer, SurpriseOutcome surprise, int opponentDie) {
         CaptureMove capture = before.resolved();
+        recorder.record(kind,capture,answer,surprise,opponentDie);
         refresh();
         if (capture != null && !view.playCapture(capture)) {
             throw new java.util.concurrent.CancellationException();
@@ -1206,7 +1264,7 @@ private void resolveSpecial(
 
     private void refresh() {
 
-        view.render(session);
+        view.render(session, activeControl().automated());
 
     }
 

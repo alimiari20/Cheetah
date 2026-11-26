@@ -12,11 +12,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Neon question modal: choose, submit, see outcome, then apply movement. */
 public final class QuestionDialog {
+    public record Result(int selected, boolean correct) {}
     private QuestionDialog(){}
     public static boolean ask(JFrame owner,Question question){
         return ask(owner,question,-1);
     }
     public static boolean ask(JFrame owner,Question question,int automaticAnswer){
+        return askRecorded(owner,question,automaticAnswer).correct();
+    }
+    public static Result askRecorded(JFrame owner,Question question,int automaticAnswer){
         JDialog dialog=new JDialog(owner,"QUESTION SQUARE",true);
         dialog.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
         UiKit.GradientPage root=new UiKit.GradientPage(new BorderLayout(0,13));
@@ -53,10 +57,12 @@ public final class QuestionDialog {
         bottom.add(apply,BorderLayout.SOUTH);center.add(bottom,BorderLayout.SOUTH);
         root.add(center,BorderLayout.CENTER);
         AtomicBoolean correct=new AtomicBoolean(false),answered=new AtomicBoolean(false);
+        int[] choice = {-1};
         Runnable submit=()->{
             if(answered.get()){dialog.dispose();return;}
             int selected=-1;for(int i=0;i<4;i++)if(radio[i].isSelected()){selected=i;break;}
             if(selected<0){Messages.set(feedback,"Please select A, B, C or D.");return;}
+            choice[0]=selected;
             boolean success=selected==question.correctIndex();correct.set(success);answered.set(true);
             for(int i=0;i<4;i++){
                 radio[i].setEnabled(false);
@@ -89,6 +95,6 @@ public final class QuestionDialog {
         }
         dialog.setLocationRelativeTo(owner);
         try { dialog.setVisible(true); } finally { think.stop(); finish.stop(); }
-        return correct.get();
+        return new Result(choice[0],correct.get());
     }
 }

@@ -19,6 +19,9 @@ import java.util.List;
  * ties are re-rolled by the tied players only. Each player is shown as a card with their knight and a big die.
  */
 public final class FirstPlayerDialog extends JDialog {
+    public record StarterRoll(String player, int die) {}
+    public record Selection(int starter, List<StarterRoll> rolls) {}
+    private final List<StarterRoll> recordedRolls = new ArrayList<>();
     private final List<String> names;
     private final List<PlayerColor> colors;
     private final List<AiLevel> controls;
@@ -91,7 +94,9 @@ public final class FirstPlayerDialog extends JDialog {
         rolling.addActionListener(e->{
             frames[0]++;
             if(frames[0]<10){shown[current]=animation.nextInt(6)+1;cards[current].repaint();return;}
-            rolling.stop();rollingCard=-1;shown[current]=value;rolls[current]=value;afterRoll();
+            rolling.stop();rollingCard=-1;shown[current]=value;rolls[current]=value;
+            recordedRolls.add(new StarterRoll(names.get(current),value));
+            afterRoll();
         });
         rolling.start();
     }
@@ -199,8 +204,12 @@ public final class FirstPlayerDialog extends JDialog {
     }
     public static int chooseStarter(JFrame owner,List<String> names,List<PlayerColor> colors,
                                     List<AiLevel> controls,Random random){
+        return chooseRecordedStarter(owner,names,colors,controls,random).starter();
+    }
+    public static Selection chooseRecordedStarter(JFrame owner,List<String> names,List<PlayerColor> colors,
+                                                   List<AiLevel> controls,Random random){
         FirstPlayerDialog dlg=new FirstPlayerDialog(owner,names,colors,controls,random);
         dlg.setVisible(true);
-        return dlg.winner;
+        return new Selection(dlg.winner,List.copyOf(dlg.recordedRolls));
     }
 }

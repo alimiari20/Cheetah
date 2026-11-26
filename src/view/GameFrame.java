@@ -31,6 +31,7 @@ public final class GameFrame extends JFrame {
         void pass();
         void selectPiece(String id);
         void history();
+        default void watchReplay(HistoryRepository.Entry entry) {}
         void exportHistory();
         void questionAdmin();
         void saveQuestion(Question question);
@@ -45,6 +46,7 @@ public final class GameFrame extends JFrame {
     private final SecurityDashboardPage securityDashboard = new SecurityDashboardPage(this::showMainMenu);
     private final SetupPage setupPage;
     private final HistoryPage historyPage;
+    private final ReplayPage replayPage = new ReplayPage(() -> show("HISTORY"));
     private final QuestionAdminPage adminPage;
     private final BoardPanel boardPanel=new BoardPanel();
     private final JLabel modeLabel=UiKit.goldLabel("CLASSIC MODE");
@@ -105,8 +107,10 @@ public final class GameFrame extends JFrame {
         setupPage=new SetupPage(()->{if(actions!=null)actions.showMenu();},config->{if(actions!=null)actions.startConfiguredGame(config);});
         screens.add(setupPage,"SETUP");
         screens.add(buildGameScreen(),"GAME");
-        historyPage=new HistoryPage(()->{if(actions!=null)actions.showMenu();},()->{if(actions!=null)actions.exportHistory();});
+        historyPage=new HistoryPage(()->{if(actions!=null)actions.showMenu();},()->{if(actions!=null)actions.exportHistory();},
+                entry -> {if(actions!=null)actions.watchReplay(entry);});
         screens.add(historyPage,"HISTORY");
+        screens.add(replayPage,"REPLAY");
         adminPage=new QuestionAdminPage(()->{if(actions!=null)actions.showMenu();},
                 q->{if(actions!=null)actions.saveQuestion(q);},id->{if(actions!=null)actions.deleteQuestion(id);});
         screens.add(adminPage,"ADMIN");
@@ -132,6 +136,7 @@ public final class GameFrame extends JFrame {
         setVisible(true);
     }
     @Override public void dispose() {
+        replayPage.close();
         boardPanel.cancelCapture();
         clock.stop();
         currentScreen = "MENU";
@@ -140,11 +145,27 @@ public final class GameFrame extends JFrame {
     }
     public void setActions(Actions a){actions=Objects.requireNonNull(a);}
     public boolean isGameVisible(){return "GAME".equals(currentScreen);}
-    private void show(String key){if(!"GAME".equals(key)){boardPanel.cancelCapture();clock.stop();if(paused)setPaused(false);}currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();if(actions!=null)actions.gameAvailabilityChanged();}
+    private void show(String key){
+        if(!"REPLAY".equals(key))replayPage.close();
+        if(!"GAME".equals(key)){boardPanel.cancelCapture();clock.stop();if(paused)setPaused(false);}
+        currentScreen=key;
+        newGameMenuItem.setEnabled(!adminMode && !"REPLAY".equals(key));
+        screenLayout.show(screens,key);
+        screens.revalidate();
+        screens.repaint();
+        if(actions!=null)actions.gameAvailabilityChanged();
+    }
     public void showMainMenu(){show(adminMode ? "DASHBOARD" : "MENU");}
     public void showSetup(){setupPage.setPreviewProvider((diff,colors)->actions.preview(diff,colors));show("SETUP");}
     public void showGame(){show("GAME");}
-    public void showHistory(List<HistoryRepository.Entry> entries){historyPage.setEntries(entries);show("HISTORY");}
+    public void showHistory(List<HistoryRepository.Entry> entries){showHistory(entries,Set.of());}
+    public void showHistory(List<HistoryRepository.Entry> entries,Set<Integer> replayIds){historyPage.setEntries(entries,replayIds);show("HISTORY");}
+    public boolean isHistoryVisible(){return "HISTORY".equals(currentScreen);}
+    public boolean isHistorySelection(HistoryRepository.Entry entry){
+        return isHistoryVisible() && entry.equals(historyPage.selectedEntry());
+    }
+    public void markReplayUnavailable(int id){historyPage.markReplayUnavailable(id);}
+    public void showReplay(Replay replay){replayPage.open(replay);show("REPLAY");}
     public void showQuestionAdmin(List<Question> questions){adminPage.showQuestions(questions);show("ADMIN");}
     public void updateQuestionAdmin(List<Question> questions){adminPage.showQuestions(questions);}
 
@@ -351,6 +372,10 @@ public final class GameFrame extends JFrame {
         return column;
     }
     public void render(GameSession session){
+        render(session,playerControls.getOrDefault(session.current().color(),AiLevel.HUMAN).automated());
+    }
+
+    public void render(GameSession session, boolean automated){
         boardPanel.setSession(session);Messages.set(modeLabel,"★  "+session.difficulty().label().toUpperCase()+"  ★");
         Messages.set(turnCounter,"TURN  "+String.format("%02d",session.turn()));
         Player player=session.current();
@@ -361,7 +386,6 @@ public final class GameFrame extends JFrame {
             case SELECT_PIECE->"CHOOSE A HIGHLIGHTED PIECE";
             case FINISHED->"GAME COMPLETED";
         });Theme.foreground(phaseLabel,session.phase()==GameSession.Phase.FINISHED?ACCENT:SUCCESS);
-        boolean automated=playerControls.getOrDefault(player.color(),AiLevel.HUMAN).automated();
         rollButton.setEnabled(!automated && session.phase()==GameSession.Phase.ROLL);
         passButton.setEnabled(!automated && session.phase()==GameSession.Phase.SELECT_PIECE&&session.legalPieceIds().isEmpty());
         DiceRoll roll=session.dice();regularFace.setValue(roll==null?0:roll.regular());specialFace.setValue(roll==null?0:roll.special());

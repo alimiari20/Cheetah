@@ -57,6 +57,10 @@
             <sysproperty key="java.awt.headless" value="true"/>
             <classpath><pathelement location="${build.dir}"/></classpath>
         </java>
+        <java classname="model.ReplayTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
 
         <java classname="view.CaptureAnimationTests" fork="true" failonerror="true">
             <sysproperty key="java.awt.headless" value="true"/>
@@ -96,6 +100,12 @@
             </classpath>
         </java>
         <java classname="security.AdminAuditTests" fork="true" failonerror="true">
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+    </target>
+
+    <target name="test-ai-desktop" depends="test">
+        <java classname="model.AiSpecialFlowTests" fork="true" failonerror="true">
             <classpath><pathelement location="${build.dir}"/></classpath>
         </java>
     </target>
