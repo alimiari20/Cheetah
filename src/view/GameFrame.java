@@ -7,6 +7,7 @@ import javax.swing.*;
 import javax.swing.border.*;
 
 import model.*;
+import security.AdminAudit;
 import java.util.Set;
 import java.awt.*;
 import java.awt.event.*;
@@ -19,6 +20,7 @@ public final class GameFrame extends JFrame {
     public interface Actions {
         void openAdminDashboard();
         void showAdminSecurity();
+        void showSecurityDashboard();
     	void logoutAdmin();
         void newGame();
         void startConfiguredGame(SetupDialog.Config config);
@@ -30,17 +32,23 @@ public final class GameFrame extends JFrame {
         void timeOut();
         void selectPiece(String id);
         void history();
+        default void watchReplay(HistoryRepository.Entry entry) {}
         void exportHistory();
         void questionAdmin();
         void saveQuestion(Question question);
+        default void suggestQuestionDifficulty(String editId,String prompt,List<String> choices,int correct) {}
         void deleteQuestion(String questionId);
+        default void gameAvailabilityChanged() {}
     }
     private Actions actions;
+    private java.util.Map<PlayerColor,AiLevel> playerControls = java.util.Map.of();
     private final CardLayout screenLayout=new CardLayout();
     private final JPanel screens=new JPanel(screenLayout);
     private final GlobalHeader header=new GlobalHeader();
+    private final SecurityDashboardPage securityDashboard = new SecurityDashboardPage(this::showMainMenu);
     private final SetupPage setupPage;
     private final HistoryPage historyPage;
+    private final ReplayPage replayPage = new ReplayPage(() -> show("HISTORY"));
     private final QuestionAdminPage adminPage;
     private final BoardPanel boardPanel=new BoardPanel();
     private final JLabel modeLabel=UiKit.goldLabel("CLASSIC MODE");
@@ -67,15 +75,16 @@ public final class GameFrame extends JFrame {
     private final JLabel instruction=Theme.label("Choose Roll Dice to begin",13,Font.BOLD,MUTED);
     private final JButton rollButton=Theme.button("ROLL DICE  ⚄",true);
     // no pass button: with no legal move the turn passes by itself after a short moment
-    private final Timer autoPass=new Timer(1500,e->autoPassNow());
+    private static final int AUTO_PASS_MILLIS=1500;
     // turn timer: each player has 30 seconds; a coloured line around their card runs down
     private static final int TURN_SECONDS=30;
     private final Timer turnTimer=new Timer(40,e->tickTurnTimer());
     private GameSession timerSession;
     private Player timerPlayer;
-    private int timerTurn;
+    private int timerTurn,timerEffectDepth;
     private GameSession.Phase timerPhase;
-    private long turnElapsed,lastTick;
+    private long turnElapsed,noMoveElapsed,lastTick;
+    private boolean renderedAutomated,selectingOpponent;
     private PlayerCard activeCard;
     private final JPanel leftPlayers=UiKit.transparent();
     private final JPanel rightPlayers=UiKit.transparent();
@@ -105,22 +114,25 @@ public final class GameFrame extends JFrame {
         dashboard = new AdminDashboardPage(
                 () -> actions.logoutAdmin(), () -> actions.questionAdmin(),
                 () -> actions.history(), () -> actions.editAdminAccount(),
-                () -> actions.showAdminSecurity());
+                () -> actions.showAdminSecurity(), () -> actions.showSecurityDashboard());
         screens.add(dashboard, "DASHBOARD");
+        screens.add(securityDashboard, "SECURITY");
         setupPage=new SetupPage(()->{if(actions!=null)actions.showMenu();},config->{if(actions!=null)actions.startConfiguredGame(config);});
         screens.add(setupPage,"SETUP");
         screens.add(buildGameScreen(),"GAME");
-        historyPage=new HistoryPage(()->{if(actions!=null)actions.showMenu();},()->{if(actions!=null)actions.exportHistory();});
+        historyPage=new HistoryPage(()->{if(actions!=null)actions.showMenu();},()->{if(actions!=null)actions.exportHistory();},
+                entry -> {if(actions!=null)actions.watchReplay(entry);});
         screens.add(historyPage,"HISTORY");
+        screens.add(replayPage,"REPLAY");
         adminPage=new QuestionAdminPage(()->{if(actions!=null)actions.showMenu();},
-                q->{if(actions!=null)actions.saveQuestion(q);},id->{if(actions!=null)actions.deleteQuestion(id);});
+                q->{if(actions!=null)actions.saveQuestion(q);},id->{if(actions!=null)actions.deleteQuestion(id);},
+                (id,prompt,choices,correct)->{if(actions!=null)actions.suggestQuestionDifficulty(id,prompt,choices,correct);});
         screens.add(adminPage,"ADMIN");
         JPanel shell=GlobalHeader.wrap(screens,header);
         Messages.bind(shell, () -> setTitle(Messages.get("Cheetah Ludo")));
         setContentPane(shell);
         boardPanel.setOnSelect(id->{if(actions!=null)actions.selectPiece(id);});
         rollButton.addActionListener(e->{if(actions!=null)actions.roll();});
-        autoPass.setRepeats(false);
         bindShortcut(KeyEvent.VK_R,"roll",()->{if(actions!=null && isGameVisible() && !paused)actions.roll();});
         bindShortcut(KeyEvent.VK_ESCAPE,"pause",()->{if(isGameVisible())setPaused(!paused);});
         setGlassPane(pauseOverlay);
@@ -136,18 +148,50 @@ public final class GameFrame extends JFrame {
         setVisible(true);
     }
     @Override public void dispose() {
+        currentScreen = "MENU";
+        stopTurnTimer();
+        replayPage.close();
         boardPanel.cancelCapture();
         clock.stop();
+        if (actions != null) actions.gameAvailabilityChanged();
         super.dispose();
     }
     public void setActions(Actions a){actions=Objects.requireNonNull(a);}
     public boolean isGameVisible(){return "GAME".equals(currentScreen);}
-    private void show(String key){if(!"GAME".equals(key)){boardPanel.cancelCapture();clock.stop();turnTimer.stop();autoPass.stop();if(paused)setPaused(false);}currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();}
+    private void show(String key){
+        currentScreen=key;
+        if(!"REPLAY".equals(key))replayPage.close();
+        if(!isGameVisible()){
+            stopTurnTimer();
+            clock.stop();
+            boardPanel.cancelCapture();
+            if(paused)setPaused(false);
+        }else if(clockSession!=null){
+            updateTurnTimer(clockSession,renderedAutomated);
+            updatePlayers(clockSession);
+            if(!paused && clockSession.phase()!=GameSession.Phase.FINISHED)clock.start();
+        }
+        newGameMenuItem.setEnabled(!adminMode && !"REPLAY".equals(key));
+        screenLayout.show(screens,key);
+        screens.revalidate();
+        screens.repaint();
+        if(actions!=null)actions.gameAvailabilityChanged();
+    }
     public void showMainMenu(){show(adminMode ? "DASHBOARD" : "MENU");}
     public void showSetup(){setupPage.setPreviewProvider((diff,colors)->actions.preview(diff,colors));show("SETUP");}
     public void showGame(){show("GAME");}
-    public void showHistory(List<HistoryRepository.Entry> entries){historyPage.setEntries(entries);show("HISTORY");}
+    public void showHistory(List<HistoryRepository.Entry> entries){showHistory(entries,Set.of());}
+    public void showHistory(List<HistoryRepository.Entry> entries,Set<Integer> replayIds){historyPage.setEntries(entries,replayIds);show("HISTORY");}
+    public boolean isHistoryVisible(){return "HISTORY".equals(currentScreen);}
+    public boolean isHistorySelection(HistoryRepository.Entry entry){
+        return isHistoryVisible() && entry.equals(historyPage.selectedEntry());
+    }
+    public void markReplayUnavailable(int id){historyPage.markReplayUnavailable(id);}
+    public void showReplay(Replay replay){replayPage.open(replay);show("REPLAY");}
     public void showQuestionAdmin(List<Question> questions){adminPage.showQuestions(questions);show("ADMIN");}
+    public boolean isQuestionAdminVisible(){return "ADMIN".equals(currentScreen);}
+    public void setQuestionAnalysisBusy(boolean busy){adminPage.analysisBusy(busy);}
+    public void applySuggestedDifficulty(Difficulty difficulty){adminPage.applySuggestedDifficulty(difficulty);}
     public void updateQuestionAdmin(List<Question> questions){adminPage.showQuestions(questions);}
 
     private void confirmExit() {
@@ -353,6 +397,10 @@ public final class GameFrame extends JFrame {
         return column;
     }
     public void render(GameSession session){
+        render(session,playerControls.getOrDefault(session.current().color(),AiLevel.HUMAN).automated());
+    }
+
+    public void render(GameSession session, boolean automated){
         boardPanel.setSession(session);Messages.set(modeLabel,"★  "+session.difficulty().label().toUpperCase()+"  ★");
         Messages.set(turnCounter,"TURN  "+String.format("%02d",session.turn()));
         Player player=session.current();
@@ -363,9 +411,8 @@ public final class GameFrame extends JFrame {
             case SELECT_PIECE->"CHOOSE A HIGHLIGHTED PIECE";
             case FINISHED->"GAME COMPLETED";
         });Theme.foreground(phaseLabel,session.phase()==GameSession.Phase.FINISHED?ACCENT:SUCCESS);
-        rollButton.setEnabled(session.phase()==GameSession.Phase.ROLL);
-        boolean noMove=session.phase()==GameSession.Phase.SELECT_PIECE&&session.legalPieceIds().isEmpty();
-        if(noMove){if(!autoPass.isRunning())autoPass.restart();}else autoPass.stop();
+        renderedAutomated=automated;
+        rollButton.setEnabled(!automated && session.phase()==GameSession.Phase.ROLL);
         DiceRoll roll=session.dice();regularFace.setValue(roll==null?0:roll.regular());specialFace.setValue(roll==null?0:roll.special());
         boolean showSpecial=session.difficulty()!=Difficulty.EASY||(roll!=null&&roll.ultraBoost());
         specialDieLabel.setVisible(showSpecial);
@@ -381,6 +428,7 @@ public final class GameFrame extends JFrame {
         // a single message for the player: what to do now, and how far the dice let them move
         String text; Theme.Tone color;
         if (session.phase() == GameSession.Phase.FINISHED) { text = "Game completed!"; color = ACCENT; }
+        else if (automated) { text = "AI is thinking…"; color = ACCENT; }
         else if (session.phase() == GameSession.Phase.ROLL) { text = "Roll the dice!"; color = ACCENT; }
         else if (session.legalPieceIds().isEmpty()) { text = "No legal moves. Passing the turn…"; color = DANGER; }
         else { text = null; color = SUCCESS; }
@@ -395,11 +443,12 @@ public final class GameFrame extends JFrame {
         Theme.foreground(instruction,color);
 
         updateHistory(session);
-        updateTurnTimer(session);
+        updateTurnTimer(session,automated);
         updatePlayers(session);
         if(clockSession!=session){pausedMillis=0;if(paused)setPaused(false);}   // a new game starts with no paused time
         clockSession=session;updateClock();
-        if(session.phase()==GameSession.Phase.FINISHED)clock.stop();else if(!clock.isRunning())clock.start();
+        if(!isGameVisible() || paused || session.phase()==GameSession.Phase.FINISHED)clock.stop();
+        else if(!clock.isRunning())clock.start();
         arenaRepaint();
     }
     /** Lets a centred label wrap onto two lines instead of being cut with "...". */
@@ -419,12 +468,14 @@ public final class GameFrame extends JFrame {
         if(isCapturePlaying())return;
         if(pause==paused)return;
         paused=pause;
+        lastTick=monotonicMillis();
         if(pause){pauseStartedAt=System.currentTimeMillis();clock.stop();}
         else{pausedMillis+=System.currentTimeMillis()-pauseStartedAt;
-             if(clockSession!=null && clockSession.phase()!=GameSession.Phase.FINISHED)clock.start();}
+             if(isGameVisible() && clockSession!=null && clockSession.phase()!=GameSession.Phase.FINISHED)clock.start();}
         updateClock();
         pauseOverlay.setVisible(pause);
         if(pause)pauseOverlay.focusResume();
+        if(actions!=null)actions.gameAvailabilityChanged();
     }
     public boolean isPaused(){return paused;}
     /** Dark layer over the whole window with a "PAUSED" card and two choices: EXIT GAME or CONTINUE. It swallows all clicks. */
@@ -501,42 +552,79 @@ public final class GameFrame extends JFrame {
             Player p=session.players().get(i);
             boolean active=p==session.current()&&running;
             JPanel target=(i%2==0?leftPlayers:rightPlayers);
-            PlayerCard card=new PlayerCard(p,active,running&&!active);     // whoever is not playing now is dimmed
-            if(active){card.remaining=turnRemaining();activeCard=card;}
-            target.add(card);target.add(Box.createVerticalStrut(12));
+            PlayerCard card=new PlayerCard(p,active,running&&!active,
+                    playerControls.getOrDefault(p.color(),AiLevel.HUMAN));
+            if(active && timerSession==session){
+                card.remaining=turnRemaining();
+                activeCard=card;
+            }
+            target.add(card);
+            target.add(Box.createVerticalStrut(12));
         }
         leftPlayers.revalidate();rightPlayers.revalidate();leftPlayers.repaint();rightPlayers.repaint();
     }
     /** Restarts the 30 seconds when a new player starts, or the same player gets a new roll (for example after a 6). */
-    private void updateTurnTimer(GameSession session){
-        boolean restart=session!=timerSession||session.current()!=timerPlayer||session.turn()!=timerTurn
-                ||(session.phase()==GameSession.Phase.ROLL&&timerPhase!=GameSession.Phase.ROLL);
-        if(restart){turnElapsed=0;lastTick=System.currentTimeMillis();}
-        timerSession=session;timerPlayer=session.current();timerTurn=session.turn();timerPhase=session.phase();
-        if(session.phase()==GameSession.Phase.FINISHED)turnTimer.stop();
-        else if(!turnTimer.isRunning()){lastTick=System.currentTimeMillis();turnTimer.start();}
+    private void updateTurnTimer(GameSession session,boolean automated){
+        if(!isGameVisible() || automated || selectingOpponent || session.phase()==GameSession.Phase.FINISHED){
+            stopTurnTimer();
+            return;
+        }
+        if(!sameTimedTurn(session) || (session.phase()==GameSession.Phase.ROLL && timerPhase!=GameSession.Phase.ROLL)){
+            turnElapsed=0;
+            noMoveElapsed=0;
+            lastTick=monotonicMillis();
+        }
+        if(timerPhase!=session.phase()){
+            noMoveElapsed=0;
+            lastTick=monotonicMillis();
+        }
+        timerSession=session;
+        timerPlayer=session.current();
+        timerTurn=session.turn();
+        timerEffectDepth=session.temporaryEffectDepth();
+        timerPhase=session.phase();
+        if(!turnTimer.isRunning())turnTimer.start();
+    }
+
+    private boolean sameTimedTurn(GameSession session){
+        return session==timerSession && session.current()==timerPlayer && session.turn()==timerTurn
+                && session.temporaryEffectDepth()==timerEffectDepth;
+    }
+
+    private void stopTurnTimer(){
+        turnTimer.stop();
+        timerSession=null;
+        timerPlayer=null;
+        timerPhase=null;
+        turnElapsed=0;
+        noMoveElapsed=0;
+        activeCard=null;
+    }
+
+    private static long monotonicMillis(){
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
     }
     /** Part of the turn time still left, from 1 (full) to 0. */
     private double turnRemaining(){return Math.max(0,1-turnElapsed/(TURN_SECONDS*1000.0));}
     private void tickTurnTimer(){
-        long now=System.currentTimeMillis(),passed=now-lastTick;lastTick=now;
-        if(timerSession==null||timerSession.phase()==GameSession.Phase.FINISHED||!isGameVisible())return;
+        long now=monotonicMillis(),passed=now-lastTick;lastTick=now;
+        if(timerSession==null || !isGameVisible() || renderedAutomated || selectingOpponent
+                || !sameTimedTurn(timerSession) || timerSession.phase()!=timerPhase)return;
         // the time stands still while the game is paused or a window (question, surprise...) is open over the game
-        if(paused||!isActive()||isCapturePlaying())return;
+        if(paused||!isActive()||isCapturePlaying()||actions==null)return;
         turnElapsed+=passed;
         if(activeCard!=null){activeCard.remaining=turnRemaining();activeCard.repaint();}
         if(turnElapsed>=TURN_SECONDS*1000L){
-            turnElapsed=0;                                   // a fresh 30 seconds if the game cannot skip right now
-            autoPass.stop();
-            if(actions!=null)actions.timeOut();
+            turnElapsed=0;
+            noMoveElapsed=0;
+            actions.timeOut();
+        }else if(timerPhase==GameSession.Phase.SELECT_PIECE && timerSession.legalPieceIds().isEmpty()){
+            noMoveElapsed+=passed;
+            if(noMoveElapsed>=AUTO_PASS_MILLIS){
+                noMoveElapsed=0;
+                actions.pass();
+            }
         }
-    }
-    /** No legal move: the turn passes by itself (waits while paused or while a window is open). */
-    private void autoPassNow(){
-        if(actions==null||!isGameVisible()||timerSession==null)return;
-        if(timerSession.phase()!=GameSession.Phase.SELECT_PIECE||!timerSession.legalPieceIds().isEmpty())return;
-        if(paused||!isActive()||isCapturePlaying()){autoPass.restart();return;}
-        actions.pass();
     }
     /**
      * Player card: the name on a ribbon in the player's colour and the player's four heroes.
@@ -545,10 +633,16 @@ public final class GameFrame extends JFrame {
      * The player whose turn it is glows and has the timer line around the card; the others are dimmed.
      */
     private static final class PlayerCard extends JComponent {
-        private final Player player; private final boolean active,dimmed;
-        double remaining=-1;                                 // turn time left (1..0) for the active card, -1 = no timer
-        PlayerCard(Player player,boolean active,boolean dimmed){
-            this.player=player;this.active=active;this.dimmed=dimmed;
+        private final Player player;
+        private final boolean active,dimmed;
+        private final AiLevel control;
+        private double remaining=-1; // No countdown on inactive cards or automated turns.
+
+        PlayerCard(Player player,boolean active,boolean dimmed,AiLevel control){
+            this.player=player;
+            this.active=active;
+            this.dimmed=dimmed;
+            this.control=control;
             setPreferredSize(new Dimension(212,96));setMaximumSize(new Dimension(214,96));setAlignmentX(LEFT_ALIGNMENT);
         }
         @Override protected void paintComponent(Graphics g){
@@ -603,6 +697,7 @@ public final class GameFrame extends JFrame {
             d.setFont(Theme.font(10,Font.BOLD));d.setColor(MUTED.color());
             String counts=player.finishedCount()+"/4 HOME   •   "+player.castleCount()+" IN CASTLE";
             counts=Messages.get(counts);
+            counts=Messages.get(control.toString())+"  ·  "+counts;
             d.drawString(counts,(w-d.getFontMetrics().stringWidth(counts))/2,top+h-9);
             d.dispose();
         }
@@ -667,6 +762,13 @@ public final class GameFrame extends JFrame {
     public void showSurprise(String message){
         UiKit.notice(this,"SURPRISE EFFECT","✦  SURPRISE SQUARE  ✦",message,"APPLY SURPRISE EFFECT  →");
     }
+    public void showSurprise(String message, boolean automated){
+        if (!automated) { showSurprise(message); return; }
+        UiKit.notice(this,"SURPRISE EFFECT","✦  SURPRISE SQUARE  ✦",message,"APPLY SURPRISE EFFECT  →",1250);
+    }
+    public void setPlayerControls(java.util.Map<PlayerColor,AiLevel> controls) {
+        playerControls=java.util.Map.copyOf(controls);
+    }
     public void showError(Exception ex){Dialogs.showMessageDialog(this,ex.getMessage(),"CHEETAH LUDO  •  ERROR",JOptionPane.ERROR_MESSAGE);}
     private static <T extends AbstractButton> T localizedMenu(T item, String text) {
         Messages.set(item,text);
@@ -699,7 +801,7 @@ public final class GameFrame extends JFrame {
           "Medium: regular die × (boost − 1). Hard: regular die × (UltraBoost − 1).\n\n"+
           "Protected star squares prevent captures. Double blocks stop opponent pieces from passing.\n\n"+
           "Question squares ask a question and move you forward/backward. Surprise squares have random effects.\n\n"+
-          "Each turn has "+TURN_SECONDS+" seconds (the line around your card); when time runs out the turn is skipped. "+
+          "Each human turn has "+TURN_SECONDS+" seconds (the line around your card); when time runs out the turn is skipped. "+
           "With no legal move the turn passes by itself.\n\n"+
           "Win by getting all four pieces Home. Keyboard: R rolls dice, Esc pauses.");
     }
@@ -725,6 +827,8 @@ public final class GameFrame extends JFrame {
         }
     }
     public void setOpponentSelectionIds(Set<String> ids) {
+        selectingOpponent=!ids.isEmpty();
+        if(selectingOpponent)stopTurnTimer();
         boardPanel.setOpponentSelectionIds(ids);
     }
 
@@ -733,7 +837,10 @@ public final class GameFrame extends JFrame {
         adminMode = enabled;
         Messages.set(homeMenuItem,enabled ? "Admin Dashboard" : "Main Menu");
         newGameMenuItem.setEnabled(!enabled);
-        if (!enabled) dashboard.setEmail(null);
+        if (!enabled) {
+            dashboard.setEmail(null);
+            securityDashboard.clear();
+        }
         showMainMenu();
     }
 
@@ -743,5 +850,11 @@ public final class GameFrame extends JFrame {
 
     public void showAdminSecurity(int attempts, long minutes) {
         AdminAccountDialog.showSecurity(this, attempts, minutes);
+    }
+
+    public void showSecurityDashboard(AdminAudit.Snapshot snapshot) {
+        if (!adminMode) return;
+        securityDashboard.setSnapshot(snapshot);
+        show("SECURITY");
     }
 }

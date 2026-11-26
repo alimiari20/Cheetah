@@ -11,7 +11,7 @@ final class AdminDashboardPage extends MenuStyle.Page {
     private final JLabel emailStatus = MenuStyle.label("ACCOUNT EMAIL", 12, Font.BOLD, ACCENT);
 
     AdminDashboardPage(Runnable logout, Runnable questions, Runnable history,
-                       Runnable account, Runnable security) {
+                       Runnable account, Runnable security, Runnable audit) {
         super(new BorderLayout(0, 24));
         setBorder(new EmptyBorder(24, 34, 24, 34));
         JPanel top = UiKit.transparent(new BorderLayout(12, 0));
@@ -23,11 +23,12 @@ final class AdminDashboardPage extends MenuStyle.Page {
         MenuStyle.addLine(workspace, MenuStyle.label("ADMIN DASHBOARD", 13, Font.BOLD, ACCENT), 0);
         MenuStyle.addLine(workspace, MenuStyle.label("Welcome, Administrator", 36, Font.BOLD, TEXT), 5);
         MenuStyle.addLine(workspace, profile(), 22);
-        JPanel tools = UiKit.transparent(new GridLayout(2, 2, 12, 12));
+        JPanel tools = UiKit.transparent(new GridLayout(0, 2, 12, 12));
         tools.add(MenuStyle.button("QUESTION MANAGEMENT", "Find and maintain the question bank", false, questions));
         tools.add(MenuStyle.button("GAME HISTORY", "Review and export past matches", false, history));
         tools.add(MenuStyle.button("ACCOUNT SETTINGS", "View your profile and manage your code", false, account));
         tools.add(MenuStyle.button("SECURITY SETTINGS", "View password and lockout details", false, security));
+        tools.add(MenuStyle.button("SECURITY DASHBOARD", "Review administrator sign-in activity", false, audit));
         tools.setMaximumSize(new Dimension(Integer.MAX_VALUE, tools.getPreferredSize().height));
         MenuStyle.addLine(workspace, tools, 16);
 

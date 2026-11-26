@@ -8,6 +8,7 @@ import javax.swing.*;
 
 import model.*;
 import security.AdminAuthService;
+import security.AdminAudit;
 import view.AdminAccountDialog;
 import security.AdminEmailRepository;
 import security.AdminAuthService.Factor;
@@ -35,14 +36,23 @@ public final class GameController
     private final GameEngine engine;
 
     private final HistoryRepository history;
+    private final ReplayRepository replays;
+    private ReplayRecorder recorder;
+    private long replayRequest;
 
     private final Random random;
+    private final Random aiRandom = new Random();
+    private final Map<PlayerColor, AiLevel> playerControls = new EnumMap<>(PlayerColor.class);
+    private final Map<Integer, AiLevel> delegatedEffects = new HashMap<>();
+    private final javax.swing.Timer aiDelay = new javax.swing.Timer(550, event -> runAiTurn());
+    private int actionDepth;
 
     private final QuestionRepository questionRepository =
 
         new QuestionRepository();
     private final AdminSession adminSession = new AdminSession();
     private final AdminAuthService adminAuthService = new AdminAuthService();
+    private final AdminAudit adminAudit = new AdminAudit();
     private final AdminEmailRepository adminEmailRepository =
             new AdminEmailRepository();
     private QuestionBank questions;
@@ -87,8 +97,10 @@ public final class GameController
         this.engine = Objects.requireNonNull(engine);
 
         this.history = Objects.requireNonNull(history);
+        this.replays = new ReplayRepository(history);
 
         this.random = Objects.requireNonNull(random);
+        aiDelay.setRepeats(false);
 
         this.questions = new QuestionBank(random);
 
@@ -124,7 +136,7 @@ public final class GameController
 
             SetupDialog.Config config,
 
-            int firstPlayer) {
+            int firstPlayer, List<String> openingRolls) {
 
         session = engine.startNewGame(
 
@@ -163,6 +175,13 @@ public final class GameController
         }
 
         matchSaved = false;
+        playerControls.clear();
+        delegatedEffects.clear();
+        for (int i = 0; i < config.colors().size(); i++) {
+            playerControls.put(config.colors().get(i), config.controls().get(i));
+        }
+        view.setPlayerControls(playerControls);
+        recorder = new ReplayRecorder(session, playerControls, openingRolls);
         
 
 selectingOpponentPiece = false;
@@ -260,7 +279,7 @@ view.setOpponentSelectionIds(Set.of());
 
         tryAction(() -> {
 
-            int first = FirstPlayerDialog.chooseStarter(
+            var selection = FirstPlayerDialog.chooseRecordedStarter(
 
                 view,
 
@@ -268,13 +287,17 @@ view.setOpponentSelectionIds(Set.of());
 
                 config.colors(),
 
+                config.controls(),
+
                 random
 
             );
 
-            if (first >= 0) {
+            if (selection.starter() >= 0) {
 
-                startSession(config, first);
+                var rolls = selection.rolls().stream()
+                        .map(roll -> "First-player roll: " + roll.player() + " rolled " + roll.die() + ".").toList();
+                startSession(config, selection.starter(), rolls);
 
                 view.showGame();
 
@@ -315,23 +338,62 @@ view.setOpponentSelectionIds(Set.of());
     }
 
     private boolean confirmLeave(String prompt) {
+        resolvingDialog = true;
+        aiDelay.stop();
+        try {
+            return UiKit.confirm(view, "Exit current game", "LEAVE CURRENT MATCH?",
+                    prompt + "\nYour unfinished progress will not be saved.", "LEAVE GAME");
+        } finally {
+            resolvingDialog = false;
+            gameAvailabilityChanged();
+        }
+    }
 
-        return UiKit.confirm(
+    private AiLevel control(PlayerColor color) {
+        return playerControls.getOrDefault(color, AiLevel.HUMAN);
+    }
 
-            view,
+    private AiLevel effectControl(PlayerColor color) {
+        return delegatedEffects.getOrDefault(session.temporaryEffectDepth(), control(color));
+    }
 
-            "Exit current game",
+    private void completeTurnEffect() {
+        engine.completeMove(session);
+        delegatedEffects.keySet().removeIf(depth -> depth > session.temporaryEffectDepth());
+        recorder.record(Replay.Kind.TURN);
+    }
 
-            "LEAVE CURRENT MATCH?",
+    private AiLevel activeControl() {
+        if (session == null) return AiLevel.HUMAN;
+        Piece trigger = selectingOpponentPiece ? session.findPiece(pendingSurprisePieceId) : null;
+        return effectControl(trigger == null ? session.current().color() : trigger.color());
+    }
 
-            prompt
+    private boolean readyForAi() {
+        return actionDepth == 0 && !resolvingDialog && view.isGameVisible() && !view.isPaused()
+                && !view.isCapturePlaying() && session != null && session.phase() != GameSession.Phase.FINISHED
+                && activeControl().automated();
+    }
 
-                + "\nYour unfinished progress will not be saved.",
+    @Override public void gameAvailabilityChanged() {
+        if (!view.isHistoryVisible()) replayRequest++;
+        aiDelay.stop();
+        if (readyForAi()) aiDelay.restart();
+    }
 
-            "LEAVE GAME"
-
-        );
-
+    private void runAiTurn() {
+        if (!readyForAi()) return;
+        AiLevel level = activeControl();
+        if (selectingOpponentPiece) {
+            String target = AiMoveStrategy.opponent(level, session, eligibleOpponentPieceIds, aiRandom);
+            performSelection(target);
+        } else if (session.phase() == GameSession.Phase.ROLL) {
+            performRoll();
+        } else if (session.legalPieceIds().isEmpty()) {
+            performPass();
+        } else {
+            performSelection(AiMoveStrategy.forLevel(level).choose(engine, session, aiRandom));
+        }
     }
 
 
@@ -351,27 +413,30 @@ view.setOpponentSelectionIds(Set.of());
                 return false;
             }
 
-            boolean passwordAccepted = verifyAdminFactor(view, Factor.PASSWORD);
-            return adminSession.signIn(passwordAccepted, () -> {
+            boolean passwordAccepted = verifyAdminFactor(view, Factor.PASSWORD, true);
+            boolean signedIn = adminSession.signIn(passwordAccepted, () -> {
                 try {
                     if (adminAuthService.codeVersion() == null) {
                         // Existing password-only installations enroll after proving the saved password.
                         return changeAdminCode(view, null, false);
                     }
-                    return verifyAdminFactor(view, Factor.CODE);
+                    return verifyAdminFactor(view, Factor.CODE, true);
                 } catch (IOException ex) {
                     throw new UncheckedIOException(ex);
                 }
             });
+            if (signedIn) adminAudit.signedIn();
+            return signedIn;
         } catch (IOException | RuntimeException ex) {
             view.showError(ex);
             return false;
         }
     }
 
-    private boolean verifyAdminFactor(Component parent, Factor factor) throws IOException {
+    private boolean verifyAdminFactor(Component parent, Factor factor, boolean login) throws IOException {
         var attempts = adminAuthService.attempts(factor);
         if (attempts.lockedSeconds() > 0) {
+            adminAudit.blocked(factor);
             Dialogs.showMessageDialog(parent,
                     "Administrator authentication is locked. Try again in "
                             + attempts.lockedSeconds() + " seconds.",
@@ -386,7 +451,7 @@ view.setOpponentSelectionIds(Set.of());
                 code ? "code" : "password",
                 value -> {
                     try {
-                        return adminAuthService.verify(factor, value);
+                        return adminAudit.verify(adminAuthService, factor, value, login);
                     } catch (IOException ex) {
                         throw new UncheckedIOException(ex);
                     }
@@ -443,6 +508,17 @@ view.setOpponentSelectionIds(Set.of());
         });
     }
 
+    @Override
+    public void showSecurityDashboard() {
+        tryAction(() -> {
+            try {
+                view.showSecurityDashboard(adminAudit.read(adminSession));
+            } catch (IOException ex) {
+                view.showInfo("Security Dashboard", "Security activity could not be read.");
+            }
+        });
+    }
+
     private void requireAdmin() {
         adminSession.requireAuthenticated();
     }
@@ -479,81 +555,101 @@ view.setOpponentSelectionIds(Set.of());
 
     }
 
+    private final QuestionAnalysis questionAnalysis = new QuestionAnalysis();
+    private boolean questionAnalysisBusy;
+    private record QuestionSave(List<Question> baseline,List<Question> update,
+                                Optional<QuestionAnalysis.Match> duplicate) {}
+
     @Override
-
-    public void saveQuestion(Question question) {
-
+    public void suggestQuestionDifficulty(String editingId,String prompt,List<String> choices,int correctIndex) {
         tryAction(() -> {
-        	 requireAdmin();
+            requireAdmin();
+            if(questionAnalysisBusy || !view.isQuestionAdminVisible()) return;
+            setQuestionAnalysisBusy(true);
+            new SwingWorker<QuestionAnalysis.DifficultySuggestion,Void>() {
+                @Override protected QuestionAnalysis.DifficultySuggestion doInBackground() throws IOException {
+                    return questionAnalysis.suggest(editingId,prompt,choices,correctIndex,questionRepository.list());
+                }
 
-            try {
-
-                List<Question> list =
-
-                    new ArrayList<>(questionRepository.list());
-
-                int old = -1;
-
-                for (int i = 0; i < list.size(); i++) {
-
-                    if (list.get(i).id().equals(question.id())) {
-
-                        old = i;
-
-                        break;
-
+                @Override protected void done() {
+                    try {
+                        if (!view.isQuestionAdminVisible() || !adminSession.isAuthenticated()) return;
+                        var suggestion=get();
+                        if (QuestionReviewDialog.confirmDifficulty(view,suggestion)
+                                && view.isQuestionAdminVisible() && adminSession.isAuthenticated()) {
+                            view.applySuggestedDifficulty(suggestion.difficulty());
+                        }
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                    } catch (java.util.concurrent.ExecutionException ex) {
+                        view.showError(new IllegalStateException(ex.getCause().getMessage(),ex.getCause()));
+                    } finally {
+                        setQuestionAnalysisBusy(false);
                     }
-
                 }
-
-                if (old >= 0) {
-
-                    list.set(old, question);
-
-                } else {
-
-                    list.add(question);
-
-                }
-
-                questionRepository.saveAll(list);
-
-                view.updateQuestionAdmin(
-
-                    questionRepository.list()
-
-                );
-
-                Dialogs.showMessageDialog(
-
-                    view,
-
-                    "Question saved successfully.",
-
-                    "Question bank",
-
-                    JOptionPane.INFORMATION_MESSAGE
-
-                );
-
-            } catch (IOException ex) {
-
-                throw new IllegalStateException(
-
-                    "Could not save question",
-
-                    ex
-
-                );
-
-            }
-
+            }.execute();
         });
+    }
 
+    @Override
+    public void saveQuestion(Question question) {
+        tryAction(() -> {
+            requireAdmin();
+            if (questionAnalysisBusy || !view.isQuestionAdminVisible()) return;
+            setQuestionAnalysisBusy(true);
+            new SwingWorker<QuestionSave,Void>() {
+                @Override protected QuestionSave doInBackground() throws IOException {
+                    var baseline = questionRepository.list();
+                    var updated = new ArrayList<>(baseline);
+                    int index = -1;
+                    for(int i=0;i<updated.size();i++) if (updated.get(i).id().equals(question.id())) {
+                        index=i;
+                        break;
+                    }
+                    if (index<0) updated.add(question);
+                    else updated.set(index,question);
+                    QuestionRepository.validate(updated);
+                    var candidates = new LinkedHashSet<>(baseline);
+                    candidates.addAll(questionRepository.readExcel());
+                    return new QuestionSave(baseline,updated,questionAnalysis.duplicate(question,List.copyOf(candidates)));
+                }
+
+                @Override protected void done() {
+                    try {
+                        if (!view.isQuestionAdminVisible() || !adminSession.isAuthenticated()) return;
+                        QuestionSave pending=get();
+                        if (pending.duplicate().isPresent()
+                                && !QuestionReviewDialog.confirmDuplicate(view,question,pending.duplicate().get())) return;
+                        requireAdmin();
+                        if (!questionRepository.list().equals(pending.baseline())) {
+                            Dialogs.showMessageDialog(view,"The question bank changed during analysis. Please save again.");
+                            return;
+                        }
+                        questionRepository.saveAll(pending.update());
+                        view.updateQuestionAdmin(questionRepository.list());
+                        Dialogs.showMessageDialog(view,"Question saved successfully.","Question bank",JOptionPane.INFORMATION_MESSAGE);
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                    } catch (java.util.concurrent.ExecutionException ex) {
+                        view.showError(new IllegalStateException(ex.getCause().getMessage(),ex.getCause()));
+                    } catch (IOException | RuntimeException ex) {
+                        view.showError(ex);
+                    } finally {
+                        setQuestionAnalysisBusy(false);
+                    }
+                }
+            }.execute();
+        });
+    }
+
+    private void setQuestionAnalysisBusy(boolean busy) {
+        questionAnalysisBusy=busy;
+        view.setQuestionAnalysisBusy(busy);
     }
 
     @Override
     public void deleteQuestion(String questionId) {
+        if (questionAnalysisBusy) return;
         tryAction(() -> {
             requireAdmin();
 
@@ -616,7 +712,11 @@ view.setOpponentSelectionIds(Set.of());
     @Override
 
     public void roll() {
+        if (session == null || activeControl().automated()) return;
+        performRoll();
+    }
 
+    private void performRoll() {
     	if (view.isCapturePlaying() || resolvingDialog || selectingOpponentPiece) {
     	    return;
     	}
@@ -631,7 +731,8 @@ view.setOpponentSelectionIds(Set.of());
 
             }
 
-            engine.roll(session, random);
+            recorder.roll(engine.roll(session, random));
+            delegatedEffects.keySet().removeIf(depth -> depth > session.temporaryEffectDepth());
 
             refresh();
 
@@ -644,7 +745,11 @@ view.setOpponentSelectionIds(Set.of());
     @Override
 
     public void pass() {
+        if (!canRunHumanTimerAction()) return;
+        performPass();
+    }
 
+    private void performPass() {
     	if (view.isCapturePlaying() || resolvingDialog || selectingOpponentPiece) {
     	    return;
     	}
@@ -652,6 +757,8 @@ view.setOpponentSelectionIds(Set.of());
         tryAction(() -> {
 
             engine.pass(session);
+            delegatedEffects.keySet().removeIf(depth -> depth > session.temporaryEffectDepth());
+            recorder.record(Replay.Kind.PASS);
 
             refresh();
 
@@ -661,14 +768,21 @@ view.setOpponentSelectionIds(Set.of());
 
     }
 
+    private boolean canRunHumanTimerAction() {
+        return actionDepth == 0 && !resolvingDialog && !selectingOpponentPiece
+                && view.isGameVisible() && !view.isPaused() && !view.isCapturePlaying()
+                && session != null && session.phase() != GameSession.Phase.FINISHED
+                && !activeControl().automated();
+    }
+
     /** The current player's 30 seconds are over: skip the rest of the turn. */
     @Override
     public void timeOut() {
-        if (resolvingDialog || selectingOpponentPiece || session == null) {
-            return;
-        }
+        if (!canRunHumanTimerAction()) return;
         tryAction(() -> {
             engine.timeOut(session);
+            delegatedEffects.keySet().removeIf(depth -> depth > session.temporaryEffectDepth());
+            recorder.record(Replay.Kind.TURN);
             refresh();
             postMatchCheck();
         });
@@ -677,6 +791,11 @@ view.setOpponentSelectionIds(Set.of());
     @Override
 
     public void selectPiece(String pieceId) {
+        if (session == null || activeControl().automated()) return;
+        performSelection(pieceId);
+    }
+
+    private void performSelection(String pieceId) {
         if(view.isCapturePlaying()) return;
 
 if (selectingOpponentPiece) {
@@ -708,7 +827,7 @@ if (selectingOpponentPiece) {
 
                 engine.move(session, pieceId);
 
-            refreshCapture(before);
+            refreshCapture(before, Replay.Kind.MOVE, null, null, 0);
 
 
             resolveSpecial(pieceId, move.squareId());
@@ -718,7 +837,7 @@ if (selectingOpponentPiece) {
 }
 
 
-engine.completeMove(session);
+completeTurnEffect();
 refresh();
 postMatchCheck();
 
@@ -746,6 +865,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
         return;
     }
 
+    AiLevel initiator = activeControl();
     int die = random.nextInt(6) + 1;
 
     OpponentBackwardCommand command =
@@ -763,7 +883,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
     pendingSurprisePieceId = null;
     view.setOpponentSelectionIds(Set.of());
 
-    refreshCapture(before);
+    refreshCapture(before, Replay.Kind.OPPONENT, null, SurpriseOutcome.OPPONENT_BACKWARD, die);
 
     resolvingDialog = true;
     try {
@@ -773,7 +893,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
                 + opponent.color().label()
                 + " piece " + (opponent.number() + 1)
                 + " moved " + Math.abs(result.steps())
-                + " squares backward."
+                + " squares backward.", initiator.automated()
         );
     } finally {
         resolvingDialog = false;
@@ -785,6 +905,11 @@ private void resolveOpponentSelection(String opponentPieceId) {
                 && ("question".equals(landing.symbol())
                     || "surprise".equals(landing.symbol()))) {
             engine.beginOpponentEffect(session, opponentPieceId);
+            if (initiator.automated()) {
+                // A forced chain belongs to the AI that triggered it, even on a human's piece.
+                delegatedEffects.put(session.temporaryEffectDepth(), initiator);
+            }
+            recorder.record(Replay.Kind.TURN);
         }
     }
     if (opponentMoved) {
@@ -813,7 +938,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
 
  // Complete the current effect.
  // GameEngine handles earned rolls and suspended turns.
- engine.completeMove(session);
+ completeTurnEffect();
 
  refresh();
  postMatchCheck();
@@ -883,23 +1008,25 @@ private void resolveSpecial(
 
             resolvingDialog = true;
 
-            boolean correct;
+            QuestionDialog.Result answerResult;
 
             try {
 
-                correct = QuestionDialog.ask(
-
-                    view,
-
-                    question
-
-                );
+                AiLevel level = effectControl(piece.color());
+                if (level.automated()) {
+                    int answer = AiMoveStrategy.answer(level, question.difficulty(), question.text(),
+                            question.choices(), aiRandom);
+                    answerResult = QuestionDialog.askRecorded(view, question, answer);
+                } else {
+                    answerResult = QuestionDialog.askRecorded(view, question, -1);
+                }
 
             } finally {
 
                 resolvingDialog = false;
 
             }
+            boolean correct = answerResult.correct();
 
             CaptureMove.Before before = CaptureMove.observe(session, pieceId);
             if (piece.color() != session.current().color()) {
@@ -918,7 +1045,8 @@ private void resolveSpecial(
                 );
             }
 
-            refreshCapture(before);
+            refreshCapture(before, Replay.Kind.QUESTION,
+                    new Replay.Answer(question, answerResult.selected(), correct), null, 0);
 
             Piece updated = session.findPiece(pieceId);
             if (updated != null
@@ -937,16 +1065,21 @@ private void resolveSpecial(
 
     if (outcome == SurpriseOutcome.OPPONENT_BACKWARD) {
         beginOpponentSelection(pieceId);
+        recorder.note(selectingOpponentPiece ? "Opponent selection started."
+                : "No eligible opponent piece. Surprise canceled.");
+        recorder.record(Replay.Kind.SURPRISE,null,null,outcome,0);
 
         resolvingDialog = true;
         try {
             if (selectingOpponentPiece) {
                 view.showSurprise(
-                    "Choose a red highlighted opponent piece on the board."
+                    effectControl(piece.color()).automated() ? "AI is choosing an opponent piece."
+                            : "Choose a red highlighted opponent piece on the board.",
+                    effectControl(piece.color()).automated()
                 );
             } else {
                 view.showSurprise(
-                    "No eligible opponent piece. Surprise canceled."
+                    "No eligible opponent piece. Surprise canceled.", effectControl(piece.color()).automated()
                 );
             }
         } finally {
@@ -959,11 +1092,11 @@ private void resolveSpecial(
     GameEngine.SurpriseFeedback feedback =
             engine.applySurprise(session, pieceId, outcome, random);
 
-    refreshCapture(before);
+    refreshCapture(before, Replay.Kind.SURPRISE, null, outcome, 0);
 
     resolvingDialog = true;
     try {
-        view.showSurprise(feedback.message());
+        view.showSurprise(feedback.message(), effectControl(piece.color()).automated());
     } finally {
         resolvingDialog = false;
     }
@@ -999,7 +1132,12 @@ private void resolveSpecial(
 
         try {
 
-            history.save(session);
+            var entry = history.save(session);
+            try {
+                replays.save(entry, recorder.complete());
+            } catch (IOException | RuntimeException ex) {
+                info = "Game saved, but its replay could not be saved.";
+            }
 
         } catch (IOException ex) {
 
@@ -1024,11 +1162,8 @@ private void resolveSpecial(
 
             try {
 
-                view.showHistory(
-
-                    history.readEntries()
-
-                );
+                var entries = history.readEntries();
+                view.showHistory(entries, replays.available(entries));
 
             } catch (IOException ex) {
 
@@ -1137,8 +1272,30 @@ private void resolveSpecial(
 
     }
 
-    private void refreshCapture(CaptureMove.Before before) {
+    @Override public void watchReplay(HistoryRepository.Entry entry) {
+        if (!view.isHistorySelection(entry)) return;
+        long request = ++replayRequest;
+        new SwingWorker<Optional<Replay>,Void>() {
+            @Override protected Optional<Replay> doInBackground() { return replays.load(entry); }
+            @Override protected void done() {
+                if (request != replayRequest || !view.isHistorySelection(entry)) return;
+                try {
+                    var replay = get();
+                    if (replay.isPresent()) view.showReplay(replay.get());
+                    else view.markReplayUnavailable(entry.gameId());
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException ex) {
+                    view.markReplayUnavailable(entry.gameId());
+                }
+            }
+        }.execute();
+    }
+
+    private void refreshCapture(CaptureMove.Before before, Replay.Kind kind,
+                                Replay.Answer answer, SurpriseOutcome surprise, int opponentDie) {
         CaptureMove capture = before.resolved();
+        recorder.record(kind,capture,answer,surprise,opponentDie);
         refresh();
         if (capture != null && !view.playCapture(capture)) {
             throw new java.util.concurrent.CancellationException();
@@ -1147,15 +1304,17 @@ private void resolveSpecial(
 
     private void refresh() {
 
-        view.render(session);
+        view.render(session, activeControl().automated());
 
     }
 
     private void tryAction(Runnable action) {
-
+        actionDepth++;
+        boolean finished = false;
         try {
 
             action.run();
+            finished = true;
 
         } catch (java.util.concurrent.CancellationException abandonedMatch) {
             // Leaving the board cancels the rest of this move, including chained dialogs.
@@ -1165,6 +1324,8 @@ private void resolveSpecial(
 
             view.showError(ex);
 
+        } finally {
+            if (--actionDepth == 0 && finished) gameAvailabilityChanged();
         }
 
     }
@@ -1208,8 +1369,8 @@ private void resolveSpecial(
         try {
             requireAdmin();
             byte[] version = adminAuthService.codeVersion();
-            if (!verifyAdminFactor(parent, Factor.PASSWORD)
-                    || (version != null && !verifyAdminFactor(parent, Factor.CODE))) {
+            if (!verifyAdminFactor(parent, Factor.PASSWORD, false)
+                    || (version != null && !verifyAdminFactor(parent, Factor.CODE, false))) {
                 return false;
             }
             requireAdmin();

@@ -13,6 +13,12 @@
   </properties>
   <dependencies>
     <dependency>
+      <groupId>com.microsoft.onnxruntime</groupId><artifactId>onnxruntime</artifactId><version>1.22.0</version>
+    </dependency>
+    <dependency>
+      <groupId>ai.djl.huggingface</groupId><artifactId>tokenizers</artifactId><version>0.33.0</version>
+    </dependency>
+    <dependency>
       <groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId>
       <version>${junit.version}</version><scope>test</scope>
     </dependency>
@@ -42,8 +48,10 @@
             <configuration>
               <skip>${skipTests}</skip>
               <target xmlns:unless="ant:unless">
+                <pathconvert property="semantic.maven.test.classpath" refid="maven.test.classpath"/>
                 <ant antfile="build.xml" target="test" inheritAll="false" unless:true="${maven.test.skip}">
                   <property name="build.dir" location="${project.build.directory}/ant-test-classes"/>
+                  <property name="semantic.external.classpath" value="${semantic.maven.test.classpath}"/>
                 </ant>
               </target>
             </configuration>

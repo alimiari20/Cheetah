@@ -35,7 +35,7 @@ public final class QuestionRepository {
      * Columns: A=ID, B=Difficulty, C=Category, D=Question, E-H=Options A-D,
      *          I=Correct answer (A-D), J=Explanation. Row 1 is the header.
      */
-    private List<Question> readExcel() throws IOException {
+    public List<Question> readExcel() throws IOException {
         List<Question> result = new ArrayList<>();
         try (InputStream input = QuestionRepository.class
                 .getResourceAsStream("/data/questions_Cheetah.xlsx")) {
@@ -227,7 +227,7 @@ public final class QuestionRepository {
             catch(AtomicMoveNotSupportedException ex){Files.move(temp,file,StandardCopyOption.REPLACE_EXISTING);}
         }finally{Files.deleteIfExists(temp);}
     }
-    private static void validate(List<Question> questions){
+    public static void validate(List<Question> questions){
         if(questions.size()<MINIMUM_QUESTIONS)throw new IllegalArgumentException("Question bank must contain at least 30 questions.");
         EnumMap<Difficulty,Integer> counts=new EnumMap<>(Difficulty.class);
         Set<String> ids=new HashSet<>();

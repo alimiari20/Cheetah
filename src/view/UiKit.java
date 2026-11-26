@@ -102,6 +102,9 @@ public final class UiKit {
     }
     /** Consistent dark modal used for confirmations and special effects. */
     public static void notice(JFrame owner,String title,String headline,String message,String closeLabel){
+        notice(owner,title,headline,message,closeLabel,0);
+    }
+    static void notice(JFrame owner,String title,String headline,String message,String closeLabel,int dismissAfter){
         JDialog dialog=new JDialog(owner,title,true);
         GradientPage root=new GradientPage(new BorderLayout(0,18));
         root.setBorder(new EmptyBorder(22,25,22,25));
@@ -112,7 +115,11 @@ public final class UiKit {
         JButton ok=Theme.button(closeLabel,true);ok.addActionListener(e->dialog.dispose());
         root.add(ok,BorderLayout.SOUTH);
         GlobalHeader.install(dialog,root);dialog.setSize(525,375);dialog.setMinimumSize(new Dimension(460,310));
-        dialog.setLocationRelativeTo(owner);dialog.setVisible(true);
+        dialog.setLocationRelativeTo(owner);
+        Timer timer=new Timer(dismissAfter,event -> dialog.dispose());
+        timer.setRepeats(false);
+        if (dismissAfter>0) timer.start();
+        try { dialog.setVisible(true); } finally { timer.stop(); }
     }
     public static boolean confirm(JFrame owner,String title,String headline,String message,String positive){
         JDialog dialog=new JDialog(owner,title,true);final boolean[] confirmed={false};

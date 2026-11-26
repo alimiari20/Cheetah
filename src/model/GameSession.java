@@ -71,6 +71,7 @@ public final class GameSession {
     	    status = saved.status();
     	}
     private String status = "Roll the dice to begin!";
+    private java.util.function.Consumer<String> replayObserver;
 
     GameSession(Board board, List<Player> players) {
         this.board = board;
@@ -97,6 +98,8 @@ public final class GameSession {
         return !effectPlayerStack.isEmpty();
     }
 
+    public int temporaryEffectDepth() { return effectPlayerStack.size(); }
+
     public Integer effectPlayerIndex() {
         return effectPlayerStack.peek();
     }
@@ -105,7 +108,11 @@ public final class GameSession {
     public List<PlayerColor> ranking() { return Collections.unmodifiableList(ranking); }
     public Instant started() { return started; }
 
-    void status(String value) { status = value; }
+    void status(String value) {
+        status = value;
+        if (replayObserver != null) replayObserver.accept(value);
+    }
+    void observeReplay(java.util.function.Consumer<String> observer) { replayObserver = observer; }
     void phase(Phase value) { phase = value; }
     void dice(DiceRoll value) { dice = value; }
     void currentPlayer(int index) { currentPlayer = index; }
@@ -155,6 +162,7 @@ public final class GameSession {
         events.add(String.format("#%02d  %s", turn, action));
         if (events.size() > 120) events.remove(0);
         status = action;
+        if (replayObserver != null) replayObserver.accept(action);
     }
     public Piece findPiece(String id) {
         for (Player player : players) for (Piece piece : player.pieces()) if (piece.id().equals(id)) return piece;

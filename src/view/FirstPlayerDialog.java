@@ -6,6 +6,7 @@ import javax.swing.*;
 import javax.swing.border.*;
 
 import model.PlayerColor;
+import model.AiLevel;
 
 import java.awt.*;
 import java.awt.event.*;
@@ -18,8 +19,12 @@ import java.util.List;
  * ties are re-rolled by the tied players only. Each player is shown as a card with their knight and a big die.
  */
 public final class FirstPlayerDialog extends JDialog {
+    public record StarterRoll(String player, int die) {}
+    public record Selection(int starter, List<StarterRoll> rolls) {}
+    private final List<StarterRoll> recordedRolls = new ArrayList<>();
     private final List<String> names;
     private final List<PlayerColor> colors;
+    private final List<AiLevel> controls;
     private final Random random;
     private final Random animation=new Random();          // only for the flicker while rolling, never for the result
     private final List<Integer> contenders=new ArrayList<>();
@@ -33,10 +38,17 @@ public final class FirstPlayerDialog extends JDialog {
     private final JLabel notice=Theme.label("",15,Font.BOLD,ACCENT);
     private int round=1,turn=0,winner=-1,rollingCard=-1;
     private boolean tie;
+    private final javax.swing.Timer aiRoll = new javax.swing.Timer(550, event -> roll());
+    private javax.swing.Timer rolling;
 
     private FirstPlayerDialog(JFrame owner,List<String> names,List<PlayerColor> colors,Random random){
+        this(owner,names,colors,Collections.nCopies(names.size(),AiLevel.HUMAN),random);
+    }
+
+    private FirstPlayerDialog(JFrame owner,List<String> names,List<PlayerColor> colors,List<AiLevel> controls,Random random){
         super(owner,"CHEETAH LUDO  •  First Player Selection",true);
-        this.names=List.copyOf(names);this.colors=List.copyOf(colors);this.random=random;
+        this.names=List.copyOf(names);this.colors=List.copyOf(colors);this.controls=List.copyOf(controls);this.random=random;
+        aiRoll.setRepeats(false);
         this.rolls=new int[names.size()];this.shown=new int[names.size()];this.cards=new RollCard[names.size()];
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);setResizable(true);
         GlobalHeader.install(this,build());
@@ -44,6 +56,11 @@ public final class FirstPlayerDialog extends JDialog {
         rollButton.addActionListener(e->roll());continueButton.addActionListener(e->dispose());
         continueButton.setEnabled(false);getRootPane().setDefaultButton(rollButton);
         setSize(Math.max(720,names.size()*200+120),620);setLocationRelativeTo(owner);update();
+    }
+    @Override public void dispose() {
+        aiRoll.stop();
+        if (rolling != null) rolling.stop();
+        super.dispose();
     }
     private JPanel build(){
         UiKit.GradientPage root=new UiKit.GradientPage(new BorderLayout(0,18));root.setBorder(new EmptyBorder(26,35,26,35));
@@ -73,13 +90,15 @@ public final class FirstPlayerDialog extends JDialog {
         int current=contenders.get(turn);int value=random.nextInt(6)+1;
         rollingCard=current;rollButton.setEnabled(false);
         final int[] frames={0};
-        javax.swing.Timer timer=new javax.swing.Timer(70,null);
-        timer.addActionListener(e->{
+        rolling=new javax.swing.Timer(70,null);
+        rolling.addActionListener(e->{
             frames[0]++;
             if(frames[0]<10){shown[current]=animation.nextInt(6)+1;cards[current].repaint();return;}
-            timer.stop();rollingCard=-1;shown[current]=value;rolls[current]=value;afterRoll();
+            rolling.stop();rollingCard=-1;shown[current]=value;rolls[current]=value;
+            recordedRolls.add(new StarterRoll(names.get(current),value));
+            afterRoll();
         });
-        timer.start();
+        rolling.start();
     }
     private void afterRoll(){
         turn++;
@@ -109,6 +128,9 @@ public final class FirstPlayerDialog extends JDialog {
         Messages.set(notice,names.get(index).toUpperCase()+", ROLL THE DIE!");
         Theme.foreground(notice,Theme.playerText(colors.get(index)));
         Messages.set(rollButton,"ROLL FOR "+names.get(index).toUpperCase());
+        boolean automated=controls.get(index).automated();
+        rollButton.setEnabled(!automated);
+        if (automated) aiRoll.restart();
         for(RollCard c:cards)c.repaint();
     }
     private int currentRoller(){return winner<0 && turn<contenders.size()?contenders.get(turn):-1;}
@@ -147,7 +169,9 @@ public final class FirstPlayerDialog extends JDialog {
                 d.setColor(SCRIM.color());d.fill(new RoundRectangle2D.Double(2,top,w-6,h-top-6,22,22));
             }
             // tag above the card
-            String tag=isWinner?"★ STARTS FIRST ★":current?(rollingCard==index?"ROLLING...":"YOUR ROLL"):(tie&&contenders.contains(index)&&rolls[index]==0?"TIE - ROLL AGAIN":null);
+            String tag=isWinner?"★ STARTS FIRST ★":current?(rollingCard==index?"ROLLING...":
+                    controls.get(index).automated()?"AI is thinking…":"YOUR ROLL"):
+                    (tie&&contenders.contains(index)&&rolls[index]==0?"TIE - ROLL AGAIN":null);
             if(tag!=null){
                 d.setFont(Theme.font(12,Font.BOLD));
                 int tw=d.getFontMetrics().stringWidth(Messages.get(tag))+22, tx=(w-6)/2-tw/2;
@@ -177,5 +201,15 @@ public final class FirstPlayerDialog extends JDialog {
     }
     public static int chooseStarter(JFrame owner,List<String> names,List<PlayerColor> colors,Random random){
         FirstPlayerDialog dlg=new FirstPlayerDialog(owner,names,colors,random);dlg.setVisible(true);return dlg.winner;
+    }
+    public static int chooseStarter(JFrame owner,List<String> names,List<PlayerColor> colors,
+                                    List<AiLevel> controls,Random random){
+        return chooseRecordedStarter(owner,names,colors,controls,random).starter();
+    }
+    public static Selection chooseRecordedStarter(JFrame owner,List<String> names,List<PlayerColor> colors,
+                                                   List<AiLevel> controls,Random random){
+        FirstPlayerDialog dlg=new FirstPlayerDialog(owner,names,colors,controls,random);
+        dlg.setVisible(true);
+        return new Selection(dlg.winner,List.copyOf(dlg.recordedRolls));
     }
 }

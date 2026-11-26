@@ -2,6 +2,7 @@ package model;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
@@ -27,6 +28,7 @@ public final class HistoryRepository {
             + "1st_place_name,2nd_place_name,3rd_place_name,4rd_place_name,game_duration(HH:MM:SS)";
     private static final String OLD_HEADER = "date,difficulty,players,winner,ranking,duration_seconds";
     private static final int COLUMNS = 8;
+    private static final Object SAVE_LOCK = new Object();
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("dd/MM/yyyy;HH:mm:ss");
 
     public HistoryRepository() {
@@ -34,11 +36,23 @@ public final class HistoryRepository {
     }
     public HistoryRepository(Path file) { this.historyFile = file; }
 
-    public void save(GameSession game) throws IOException {
+    Path replayDirectory() { return historyFile.toAbsolutePath().resolveSibling(historyFile.getFileName() + ".replays"); }
+
+    public Entry save(GameSession game) throws IOException {
         if (game.phase() != GameSession.Phase.FINISHED || game.ranking().isEmpty())
             throw new IllegalStateException("Game is not complete");
         Path parent = historyFile.toAbsolutePath().getParent();
         if (parent != null) Files.createDirectories(parent);
+        synchronized (SAVE_LOCK) {
+            Path lock = historyFile.resolveSibling(historyFile.getFileName() + ".lock");
+            try (var channel = FileChannel.open(lock, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                 var ignored = channel.lock()) {
+                return appendCompleted(game);
+            }
+        }
+    }
+
+    private Entry appendCompleted(GameSession game) throws IOException {
         convertOldFormat();
         if (!Files.exists(historyFile))
             Files.writeString(historyFile, HEADER + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
@@ -48,13 +62,16 @@ public final class HistoryRepository {
         while (places.size() < 4) places.add("");
 
         long seconds = Math.max(0, Duration.between(game.started(), Instant.now()).toSeconds());
+        int id = nextGameId();
+        String date = LocalDateTime.now().format(TIMESTAMP);
         String line = String.join(",",
-                Integer.toString(nextGameId()),
+                Integer.toString(id),
                 game.difficulty().name().toLowerCase(Locale.ROOT),
-                LocalDateTime.now().format(TIMESTAMP),
+                date,
                 csv(places.get(0)), csv(places.get(1)), csv(places.get(2)), csv(places.get(3)),
                 duration(seconds));
         Files.writeString(historyFile, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+        return entry(parseCsv(line));
     }
 
     public String displayHistory() throws IOException {
@@ -67,7 +84,22 @@ public final class HistoryRepository {
         return sb.toString();
     }
 
-    public record Entry(String date,String difficulty,int players,String winner,String ranking,long seconds) {}
+    public record Entry(String date,String difficulty,int players,String winner,String ranking,long seconds,int gameId) {
+        public Entry(String date,String difficulty,int players,String winner,String ranking,long seconds) {
+            this(date,difficulty,players,winner,ranking,seconds,0);
+        }
+    }
+
+    private static Entry entry(List<String> fields) {
+        List<String> names = new ArrayList<>();
+        for (int p = 3; p <= 6; p++) if (!fields.get(p).isBlank()) names.add(unprotect(fields.get(p).trim()));
+        if (names.isEmpty()) throw new IllegalArgumentException("Missing ranking");
+        int id;
+        try { id = Integer.parseInt(fields.get(0).trim()); }
+        catch (NumberFormatException ex) { id = 0; }
+        return new Entry(fields.get(2).trim(), fields.get(1).trim().toUpperCase(Locale.ROOT), names.size(),
+                names.get(0), String.join(" > ", names), parseDuration(fields.get(7)), id);
+    }
 
     /** Structured history for the desktop table, newest first. */
     public List<Entry> readEntries() throws IOException {
@@ -80,11 +112,7 @@ public final class HistoryRepository {
             List<String> f = parseCsv(lines.get(i));
             if (f.size() != COLUMNS) continue;
             try {
-                List<String> names = new ArrayList<>();
-                for (int p = 3; p <= 6; p++) if (!f.get(p).isBlank()) names.add(unprotect(f.get(p).trim()));
-                if (names.isEmpty()) continue;
-                result.add(new Entry(f.get(2).trim(), f.get(1).trim().toUpperCase(Locale.ROOT), names.size(),
-                        names.get(0), String.join(" > ", names), parseDuration(f.get(7))));
+                result.add(entry(f));
             } catch (RuntimeException ignored) { /* ignore a malformed historic row */ }
         }
         Collections.reverse(result);

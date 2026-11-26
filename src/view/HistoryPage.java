@@ -20,8 +20,11 @@ public final class HistoryPage extends UiKit.GradientPage {
     private final JTable table=new JTable(model);
     private final JTextArea details=UiKit.area("",4);
     private final JLabel count=UiKit.goldLabel("COMPLETED MATCHES  •  0");
+    private final JLabel replayStatus=UiKit.sub("");
+    private final JButton watch=Theme.button("WATCH REPLAY",true);
+    private Set<Integer> available=Set.of();
     private List<HistoryRepository.Entry> records=List.of();
-    public HistoryPage(Runnable back,Runnable export){
+    public HistoryPage(Runnable back,Runnable export,java.util.function.Consumer<HistoryRepository.Entry> replay){
         super(new BorderLayout(15,16));setBorder(new EmptyBorder(20,30,23,30));
         JPanel top=UiKit.transparent(new BorderLayout(10,0));
         JButton b=Theme.button("← BACK",false);b.addActionListener(e->back.run());top.add(b,BorderLayout.LINE_START);
@@ -53,9 +56,18 @@ public final class HistoryPage extends UiKit.GradientPage {
         JPanel foot=UiKit.transparent(new BorderLayout(0,8));foot.add(UiKit.goldLabel("FINAL RANKINGS"),BorderLayout.NORTH);
         details.setEditable(false);details.setFocusable(false);Theme.background(details,BACKGROUND);
         foot.add(new JScrollPane(details),BorderLayout.CENTER);foot.setPreferredSize(new Dimension(350,130));
+        JPanel replayControls=UiKit.transparent(new FlowLayout(FlowLayout.TRAILING,8,0));
+        watch.addActionListener(event -> {
+            var entry=selectedEntry();
+            if(entry!=null && available.contains(entry.gameId())) replay.accept(entry);
+        });
+        watch.setVisible(false);
+        replayControls.add(replayStatus);replayControls.add(watch);
+        foot.add(replayControls,BorderLayout.SOUTH);
         body.add(foot,BorderLayout.SOUTH);add(body,BorderLayout.CENTER);
     }
-    public void setEntries(List<HistoryRepository.Entry> entries){
+    public void setEntries(List<HistoryRepository.Entry> entries,Set<Integer> replayIds){
+        available=new HashSet<>(replayIds);
         this.records=List.copyOf(entries);Messages.set(count,"COMPLETED MATCHES  •  "+records.size());
         model.setRowCount(0);
         for(HistoryRepository.Entry e:records) {
@@ -63,11 +75,28 @@ public final class HistoryPage extends UiKit.GradientPage {
             model.addRow(new Object[]{date,e.difficulty(),e.players(),e.winner(),String.format("%02d:%02d:%02d",e.seconds()/3600,(e.seconds()/60)%60,e.seconds()%60)});
         }
         if(!records.isEmpty())table.setRowSelectionInterval(0,0);
-        else Messages.set(details,"No completed matches yet. Play a full game to create a history record.");
+        else {
+            Messages.set(details,"No completed matches yet. Play a full game to create a history record.");
+            updateReplayControl(null);
+        }
+    }
+    HistoryRepository.Entry selectedEntry(){
+        int row=table.getSelectedRow();
+        return row<0||row>=records.size()?null:records.get(table.convertRowIndexToModel(row));
+    }
+    public void markReplayUnavailable(int id) {
+        if (available.contains(id)) available.remove(id);
+        updateReplayControl(selectedEntry());
+    }
+    private void updateReplayControl(HistoryRepository.Entry entry) {
+        boolean playable=entry!=null && available.contains(entry.gameId());
+        watch.setVisible(playable);
+        Messages.set(replayStatus,entry!=null && !playable?"Replay unavailable":"");
     }
     private void showSelected(){
-        int row=table.getSelectedRow();if(row<0||row>=records.size())return;
-        HistoryRepository.Entry e=records.get(table.convertRowIndexToModel(row));
+        HistoryRepository.Entry e=selectedEntry();
+        updateReplayControl(e);
+        if(e==null)return;
         String[] names=e.ranking().split(" > ");
         Messages.bind(details, () -> {
             StringBuilder text=new StringBuilder();

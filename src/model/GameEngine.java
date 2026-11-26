@@ -218,6 +218,21 @@ public final class GameEngine {
         return strategy.stepsFor(piece, session.dice());
     }
 
+    /** Read-only destination of a currently legal selection, including truncated moves. */
+    int previewLandingIndex(GameSession session, Piece piece) {
+        if (!session.legalPieceIds().contains(piece.id())) {
+            throw new IllegalArgumentException("A preview requires a legal move");
+        }
+        return piece.state() == Piece.State.CASTLE ? 0 : piece.pathIndex() + unblockedSteps(session, piece);
+    }
+
+    private int unblockedSteps(GameSession session, Piece piece) {
+        int requested = stepsFor(session, piece);
+        int firstBlocked = firstBlockedStep(session.board().path(piece.color()), piece.pathIndex(),
+                requested, opponentDoubleBlocks(session, piece.color()));
+        return firstBlocked > 0 ? firstBlocked - 1 : requested;
+    }
+
     /**
      * Full movement has priority over stopping at a block.
      */
@@ -323,22 +338,7 @@ public final class GameEngine {
 
         } else {
 
-            int requested = stepsFor(session, piece);
-
-            Set<String> blocked = opponentDoubleBlocks(
-                session,
-                player.color()
-            );
-
-            int firstBlocked = firstBlockedStep(
-                board.path(player.color()),
-                piece.pathIndex(),
-                requested,
-                blocked
-            );
-
-            steps = firstBlocked > 0
-                ? firstBlocked - 1 : requested;
+            steps = unblockedSteps(session, piece);
 
             if (steps < 1) {
                 throw new IllegalStateException(
@@ -790,14 +790,17 @@ public final class GameEngine {
         if (session.phase() == GameSession.Phase.FINISHED) {
             return;
         }
-        if (session.hasTemporaryEffectPlayer()) {
-            session.endTemporaryEffect();
-        }
         session.record(
             session.current().name()
             + " ran out of time — turn skipped."
         );
-        advanceTurn(session);
+        if (session.hasTemporaryEffectPlayer()) {
+            session.ultraNextRoll(false);
+            session.pendingExtraRolls(0);
+            completeMove(session);
+        } else {
+            advanceTurn(session);
+        }
     }
 
     private void advanceTurn(GameSession session) {
