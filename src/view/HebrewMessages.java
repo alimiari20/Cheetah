@@ -144,6 +144,7 @@ public final class HebrewMessages extends ListResourceBundle {
         Game completed!=>המשחק הסתיים!
         Roll the dice!=>הטילו את הקוביות!
         No legal moves. Pass your turn.=>אין מהלכים חוקיים. העבירו את התור.
+        No legal moves. Passing the turn…=>אין מהלכים חוקיים. התור עובר…
         Move {0}. Pick a glowing hero.=>בחרו כלי מודגש. מהלך אפשרי: {0}.
         {0} TRACK=>{0} במסלול
         {0} HOME=>{0} בנתיב הבית
@@ -369,7 +370,7 @@ public final class HebrewMessages extends ListResourceBundle {
         ★  CLASSIC DESKTOP EDITION  ★=>★ גרסת מחשב קלאסית ★
         Startup Error=>שגיאת הפעלה
         Cannot start Cheetah Ludo:\\n{0}=>הפעלת צ׳יטה לודו נכשלה:\\n{0t}
-        Roll 6 to bring a piece out of its castle. A six grants an extra roll, but three consecutive sixes end the turn.\\n\\nClick one highlighted piece to move. You need an exact roll to reach Home.\\n\\nMedium: regular die × (boost − 1). Hard: regular die × (UltraBoost − 1).\\n\\nProtected star squares prevent captures. Double blocks stop opponent pieces from passing.\\n\\nQuestion squares ask a question and move you forward/backward. Surprise squares have random effects.\\n\\nWin by getting all four pieces Home. Keyboard: R rolls dice, P passes when permitted.=>הטילו 6 כדי להוציא כלי מהטירה. 6 מקנה הטלה נוספת, אבל שלושה רצופים מסיימים את התור.\\n\\nבחרו כלי מודגש כדי להזיז אותו. נדרשת תוצאה מדויקת כדי להגיע הביתה.\\n\\nבינוני: תוצאת הקובייה הרגילה כפול (בוסט פחות 1). קשה: תוצאת הקובייה הרגילה כפול (אולטרה־בוסט פחות 1).\\n\\nמשבצות כוכב מגינות מפני לכידה. חסימה כפולה מונעת מכלי היריב לעבור.\\n\\nבמשבצת שאלה, תשובה נכונה מקדמת את הכלי ותשובה שגויה מחזירה אותו לאחור. למשבצות הפתעה השפעות אקראיות.\\n\\nמנצחים כשכל ארבעת הכלים מגיעים הביתה. במקלדת: R להטלה, P להעברת תור כשהדבר מותר.
+        Roll 6 to bring a piece out of its castle. A six grants an extra roll, but three consecutive sixes end the turn.\\n\\nClick one highlighted piece to move. You need an exact roll to reach Home.\\n\\nMedium: regular die × (boost − 1). Hard: regular die × (UltraBoost − 1).\\n\\nProtected star squares prevent captures. Double blocks stop opponent pieces from passing.\\n\\nQuestion squares ask a question and move you forward/backward. Surprise squares have random effects.\\n\\nEach turn has 30 seconds (the line around your card); when time runs out the turn is skipped. With no legal move the turn passes by itself.\\n\\nWin by getting all four pieces Home. Keyboard: R rolls dice, Esc pauses.=>הטילו 6 כדי להוציא כלי מהטירה. 6 מקנה הטלה נוספת, אבל שלושה רצופים מסיימים את התור.\\n\\nבחרו כלי מודגש כדי להזיז אותו. נדרשת תוצאה מדויקת כדי להגיע הביתה.\\n\\nבינוני: תוצאת הקובייה הרגילה כפול (בוסט פחות 1). קשה: תוצאת הקובייה הרגילה כפול (אולטרה־בוסט פחות 1).\\n\\nמשבצות כוכב מגינות מפני לכידה. חסימה כפולה מונעת מכלי היריב לעבור.\\n\\nבמשבצת שאלה, תשובה נכונה מקדמת את הכלי ותשובה שגויה מחזירה אותו לאחור. למשבצות הפתעה השפעות אקראיות.\\n\\nלכל תור 30 שניות (הקו סביב הכרטיס שלכם); כשהזמן נגמר התור מדולג. כשאין מהלך חוקי התור עובר מעצמו.\\n\\nמנצחים כשכל ארבעת הכלים מגיעים הביתה. במקלדת: R להטלה, Esc להשהיה.
         ★ STARTS FIRST ★=>★ מתחיל ראשון ★
         ROLLING...=>מטיל קובייה…
         TIE - ROLL AGAIN=>תיקו — הטלה חוזרת
@@ -403,6 +404,7 @@ public final class HebrewMessages extends ListResourceBundle {
         {0} answered incorrectly ({1}). {2}.=>{0} ענה לא נכון (רמה {1t}). {2t}.
         Shifted {0} squares=>תזוזה של {0} משבצות
         {0} forfeits their turn (surprise penalty).=>{0} מדלג על תורו עקב הפתעה.
+        {0} ran out of time — turn skipped.=>הזמן של {0} נגמר — התור דולג.
         {0} finished in place {1}.=>{0} סיים במקום {1}.
         Game over! Winner: {0}=>המשחק הסתיים! ניצחון ל־{0}
         Immediate surprise UltraBoost roll!=>הטלת אולטרה־בוסט מיידית מהפתעה!
