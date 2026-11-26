@@ -1,5 +1,7 @@
 package view;
 
+import static view.Theme.Tone.*;
+
 import javax.swing.*;
 import javax.swing.border.*;
 
@@ -28,7 +30,7 @@ public final class FirstPlayerDialog extends JDialog {
     private final JButton continueButton=Theme.button("START GAME  →",true);
     private final JLabel title=UiKit.title("WHO STARTS?",28);
     private final JLabel subtitle=UiKit.sub("Each player rolls one die. The highest roll takes the first turn.");
-    private final JLabel notice=Theme.label("",15,Font.BOLD,Theme.GOLD);
+    private final JLabel notice=Theme.label("",15,Font.BOLD,ACCENT);
     private int round=1,turn=0,winner=-1,rollingCard=-1;
     private boolean tie;
 
@@ -37,11 +39,11 @@ public final class FirstPlayerDialog extends JDialog {
         this.names=List.copyOf(names);this.colors=List.copyOf(colors);this.random=random;
         this.rolls=new int[names.size()];this.shown=new int[names.size()];this.cards=new RollCard[names.size()];
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);setResizable(true);
-        setContentPane(build());
+        GlobalHeader.install(this,build());
         for(int i=0;i<names.size();i++)contenders.add(i);
         rollButton.addActionListener(e->roll());continueButton.addActionListener(e->dispose());
         continueButton.setEnabled(false);getRootPane().setDefaultButton(rollButton);
-        setSize(Math.max(720,names.size()*200+120),580);setLocationRelativeTo(owner);update();
+        setSize(Math.max(720,names.size()*200+120),620);setLocationRelativeTo(owner);update();
     }
     private JPanel build(){
         UiKit.GradientPage root=new UiKit.GradientPage(new BorderLayout(0,18));root.setBorder(new EmptyBorder(26,35,26,35));
@@ -86,17 +88,17 @@ public final class FirstPlayerDialog extends JDialog {
         List<Integer> ties=new ArrayList<>();for(int i:contenders)if(rolls[i]==high)ties.add(i);
         if(ties.size()==1){
             winner=ties.get(0);tie=false;
-            title.setText("★  "+names.get(winner).toUpperCase()+" STARTS!  ★");
-            title.setForeground(Theme.player(colors.get(winner)));
-            subtitle.setText("Highest roll: "+high+". Turns go clockwise from here.");
-            notice.setText("PRESS START GAME TO GO TO THE BOARD");notice.setForeground(Theme.GOLD);
-            continueButton.setEnabled(true);rollButton.setEnabled(false);rollButton.setText("ROLL DICE");
+            Messages.set(title,"★  "+names.get(winner).toUpperCase()+" STARTS!  ★");
+            Theme.foreground(title,Theme.playerText(colors.get(winner)));
+            Messages.set(subtitle,"Highest roll: "+high+". Turns go clockwise from here.");
+            Messages.set(notice,"PRESS START GAME TO GO TO THE BOARD");Theme.foreground(notice,ACCENT);
+            continueButton.setEnabled(true);rollButton.setEnabled(false);Messages.set(rollButton,"ROLL DICE");
             getRootPane().setDefaultButton(continueButton);
             for(RollCard c:cards)c.repaint();
         }else{
             round++;contenders.clear();contenders.addAll(ties);turn=0;tie=true;
-            title.setText("IT'S A TIE!");
-            subtitle.setText("Round "+round+": only the tied players roll again.");
+            Messages.set(title,"IT'S A TIE!");
+            Messages.set(subtitle,"Round "+round+": only the tied players roll again.");
             for(int i:ties){rolls[i]=0;shown[i]=0;}
             rollButton.setEnabled(true);update();
         }
@@ -104,9 +106,9 @@ public final class FirstPlayerDialog extends JDialog {
     private void update(){
         if(winner>=0||turn>=contenders.size())return;
         int index=contenders.get(turn);
-        notice.setText(names.get(index).toUpperCase()+", ROLL THE DIE!");
-        notice.setForeground(Theme.player(colors.get(index)));
-        rollButton.setText("ROLL FOR "+names.get(index).toUpperCase());
+        Messages.set(notice,names.get(index).toUpperCase()+", ROLL THE DIE!");
+        Theme.foreground(notice,Theme.playerText(colors.get(index)));
+        Messages.set(rollButton,"ROLL FOR "+names.get(index).toUpperCase());
         for(RollCard c:cards)c.repaint();
     }
     private int currentRoller(){return winner<0 && turn<contenders.size()?contenders.get(turn):-1;}
@@ -124,14 +126,14 @@ public final class FirstPlayerDialog extends JDialog {
             boolean current=currentRoller()==index, isWinner=winner==index;
             boolean out=(winner>=0&&!isWinner)||(tie&&!contenders.contains(index));   // lost, or not part of the tie-break
             // card body
-            d.setColor(new Color(4,15,53,90));d.fill(new RoundRectangle2D.Double(3,top+5,w-6,h-top-6,22,22));
-            d.setColor(new Color(24,57,132,235));d.fill(new RoundRectangle2D.Double(2,top,w-6,h-top-6,22,22));
-            Color edge=isWinner?Theme.GOLD:current?team:new Color(82,135,229,150);
+            d.setColor(SHADOW.color());d.fill(new RoundRectangle2D.Double(3,top+5,w-6,h-top-6,22,22));
+            d.setColor(SURFACE.color());d.fill(new RoundRectangle2D.Double(2,top,w-6,h-top-6,22,22));
+            Color edge=isWinner?ACCENT.color():current?team:BORDER.color();
             d.setColor(edge);d.setStroke(new BasicStroke(isWinner||current?4f:1.2f));
             d.draw(new RoundRectangle2D.Double(2,top,w-6,h-top-6,22,22));
             // name ribbon in the team colour
             d.setColor(team);d.fill(new RoundRectangle2D.Double(14,top+14,w-34,34,12,12));
-            d.setColor(Color.WHITE);d.setFont(Theme.font(15,Font.BOLD));
+            d.setColor(Theme.teamInk(team));d.setFont(Theme.font(15,Font.BOLD));
             String name=names.get(index);
             FontMetrics fm=d.getFontMetrics();
             while(fm.stringWidth(name)>w-50 && name.length()>3) name=name.substring(0,name.length()-2)+"…";
@@ -142,22 +144,22 @@ public final class FirstPlayerDialog extends JDialog {
             int s=64, dx=(w-6)/2-s/2, dy=h-s-30;
             drawDie(d,dx,dy,s,shown[index],rollingCard==index);
             if(out){                                                                     // dim players who are out
-                d.setColor(new Color(14,32,84,150));d.fill(new RoundRectangle2D.Double(2,top,w-6,h-top-6,22,22));
+                d.setColor(SCRIM.color());d.fill(new RoundRectangle2D.Double(2,top,w-6,h-top-6,22,22));
             }
             // tag above the card
             String tag=isWinner?"★ STARTS FIRST ★":current?(rollingCard==index?"ROLLING...":"YOUR ROLL"):(tie&&contenders.contains(index)&&rolls[index]==0?"TIE - ROLL AGAIN":null);
             if(tag!=null){
                 d.setFont(Theme.font(12,Font.BOLD));
-                int tw=d.getFontMetrics().stringWidth(tag)+22, tx=(w-6)/2-tw/2;
-                d.setColor(isWinner?Theme.GOLD:team);d.fill(new RoundRectangle2D.Double(tx,2,tw,28,14,14));
-                d.setColor(isWinner?Theme.NAVY:Color.WHITE);d.drawString(tag,tx+11,21);
+                int tw=d.getFontMetrics().stringWidth(Messages.get(tag))+22, tx=(w-6)/2-tw/2;
+                d.setColor(isWinner?PRIMARY.color():team);d.fill(new RoundRectangle2D.Double(tx,2,tw,28,14,14));
+                d.setColor(isWinner?ON_PRIMARY.color():Theme.teamInk(team));d.drawString(Messages.get(tag),tx+11,21);
             }
             d.dispose();
         }
         private void drawDie(Graphics2D d,int x,int y,int s,int value,boolean rolling){
-            Color ink=new Color(10,16,44);
-            d.setColor(new Color(4,10,30,120));d.fill(new RoundRectangle2D.Double(x+4,y+5,s,s,14,14));
-            d.setColor(rolling?new Color(255,236,170):Color.WHITE);d.fill(new RoundRectangle2D.Double(x,y,s,s,14,14));
+            Color ink=ON_PRIMARY.color();
+            d.setColor(SHADOW.color());d.fill(new RoundRectangle2D.Double(x+4,y+5,s,s,14,14));
+            d.setColor(rolling?Theme.blend(PRIMARY.color(),Color.WHITE,.24f):Color.WHITE);d.fill(new RoundRectangle2D.Double(x,y,s,s,14,14));
             d.setColor(ink);d.setStroke(new BasicStroke(2.5f));d.draw(new RoundRectangle2D.Double(x,y,s,s,14,14));
             if(value<=0){
                 d.setFont(Theme.font(32,Font.BOLD));

@@ -1,7 +1,1 @@
-/bin/
-/build/
-/release/
-/.metadata/
-*.log
-*.class
-.DS_Store
+/target/

@@ -1,6 +1,8 @@
 
 package com.cheetahludo;
 
+import view.Dialogs;
+
 import controller.GameController;
 import model.BoardRepository;
 import model.Difficulty;
@@ -8,10 +10,11 @@ import model.GameEngine;
 import model.HistoryRepository;
 import model.QuestionBank;
 import view.GameFrame;
+import security.AdminSetup;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
+import view.Theme;
 import java.awt.GraphicsEnvironment;
 import java.util.Random;
 
@@ -23,6 +26,11 @@ public final class Main {
     }
 
     public static void main(String[] args) {
+        if (args.length == 1 && "--setup-admin".equals(args[0])) {
+            AdminSetup.main(new String[0]);
+            return;
+        }
+
         if (args.length > 0 && "--check".equals(args[0])) {
             checkInstallation();
             return;
@@ -36,14 +44,13 @@ public final class Main {
 
         SwingUtilities.invokeLater(() -> {
             try {
-                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            } catch (Exception ignored) {
-                // Swing's default look and feel is also supported.
-            }
-
-            try {
+                Theme.install();
                 GameFrame frame = new GameFrame();
                 GameEngine engine = new GameEngine(new BoardRepository());
+                if (args.length == 1 && "--capture-lab".equals(args[0])) {
+                    frame.openCaptureLab(engine);
+                    return;
+                }
                 GameController controller = new GameController(
                         frame, engine, new HistoryRepository(), new Random());
 
@@ -53,7 +60,7 @@ public final class Main {
                 System.out.println("Cheetah Ludo Swing launched successfully.");
             } catch (Exception error) {
                 error.printStackTrace();
-                JOptionPane.showMessageDialog(null,
+                Dialogs.showMessageDialog(null,
                         "Cannot start Cheetah Ludo:\n" + error.getMessage(),
                         "Startup Error", JOptionPane.ERROR_MESSAGE);
             }

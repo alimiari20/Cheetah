@@ -1,20 +1,19 @@
 CHEETAH LUDO - OPEN THE GAME IN ECLIPSE (WINDOWS + MAC)
 =======================================================
 
-This GUI edition has a new Eclipse project name: CheetahLudoPrototypeGUI.
-It does NOT overwrite the old CheetahLudoEclipse project.
+Eclipse project name: Cheetah.
 
 1) Unzip the whole archive.
 2) In Eclipse: File > Import > General > Existing Projects into Workspace.
-3) Choose "Select root directory", then Browse to the extracted CheetahLudoPrototypeGUI folder.
-4) You should see a checkbox for CheetahLudoPrototypeGUI; select it and click Finish.
+3) Choose "Select root directory", then Browse to the folder containing .project.
+4) You should see a checkbox for Cheetah; select it and click Finish.
 5) In Package Explorer expand:
-       CheetahLudoPrototypeGUI > src > com.cheetahludo > Main.java
+       Cheetah > src > com.cheetahludo > Main.java
 6) RIGHT-CLICK Main.java > Run As > Java Application.
    OR right-click CheetahLudo-Game.launch > Run As > CheetahLudo-Game.
 
 The game opens in a separate desktop window, not inside the Console.
-The Console should print: CHEETAH LUDO: Main menu window is now open.
+The Console should print: Cheetah Ludo Swing launched successfully.
 
 IMPORTANT: Do NOT run the old CheetahLudo-Check configuration.
 If the GREEN RUN button still starts the old project, click its dropdown arrow,

@@ -54,8 +54,39 @@
             </classpath>
         </java>
 
+        <java classname="view.CaptureAnimationTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+
+        <java classname="view.ThemeTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+        <java classname="view.LanguageTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+
         <java classname="model.RepositoryTests" fork="true" failonerror="true">
             <sysproperty key="java.awt.headless" value="true"/>
+            <classpath>
+                <pathelement location="${build.dir}"/>
+            </classpath>
+        </java>
+
+        <java classname="security.AdminEmailRepositoryTests" fork="true" failonerror="true">
+            <classpath>
+                <pathelement location="${build.dir}"/>
+            </classpath>
+        </java>
+
+        <java classname="security.AdminSessionTests" fork="true" failonerror="true">
+            <classpath>
+                <pathelement location="${build.dir}"/>
+            </classpath>
+        </java>
+        <java classname="security.AdminAuthServiceTests" fork="true" failonerror="true">
             <classpath>
                 <pathelement location="${build.dir}"/>
             </classpath>

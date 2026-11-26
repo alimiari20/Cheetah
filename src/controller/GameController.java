@@ -1,12 +1,20 @@
 package controller;
 
+import view.Dialogs;
+
 import view.*;
 
 import javax.swing.*;
 
 import model.*;
-
+import security.AdminAuthService;
+import view.AdminAccountDialog;
+import security.AdminEmailRepository;
+import security.AdminAuthService.Factor;
+import security.AdminSession;
+import java.awt.Component;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 
 import java.nio.file.*;
 
@@ -33,7 +41,10 @@ public final class GameController
     private final QuestionRepository questionRepository =
 
         new QuestionRepository();
-
+    private final AdminSession adminSession = new AdminSession();
+    private final AdminAuthService adminAuthService = new AdminAuthService();
+    private final AdminEmailRepository adminEmailRepository =
+            new AdminEmailRepository();
     private QuestionBank questions;
 
     private GameSession session;
@@ -169,9 +180,9 @@ view.setOpponentSelectionIds(Set.of());
 
     public void newGame() {
 
-    	if (resolvingDialog || selectingOpponentPiece) {
-    	    return;
-    	}
+        if (resolvingDialog || selectingOpponentPiece) {
+            return;
+        }
 
         if (view.isGameVisible()
 
@@ -243,7 +254,7 @@ view.setOpponentSelectionIds(Set.of());
 
             SetupDialog.Config config) {
 
-    	if (resolvingDialog || selectingOpponentPiece) {
+    	if (view.isCapturePlaying() || resolvingDialog || selectingOpponentPiece) {
     	    return;
     	}
 
@@ -298,7 +309,7 @@ view.setOpponentSelectionIds(Set.of());
             return;
 
         }
-
+        
         view.showMainMenu();
 
     }
@@ -323,11 +334,126 @@ view.setOpponentSelectionIds(Set.of());
 
     }
 
-    @Override
 
+
+
+
+
+
+
+    private boolean loginAdmin() {
+        try {
+            if (!adminAuthService.isProvisioned()) {
+                Dialogs.showMessageDialog(view,
+                        "No local administrator account exists. Run the following command in a terminal:\n"
+                                + "java -jar CheetahLudo.jar --setup-admin",
+                        "Admin Setup", JOptionPane.INFORMATION_MESSAGE);
+                return false;
+            }
+
+            boolean passwordAccepted = verifyAdminFactor(view, Factor.PASSWORD);
+            return adminSession.signIn(passwordAccepted, () -> {
+                try {
+                    if (adminAuthService.codeVersion() == null) {
+                        // Existing password-only installations enroll after proving the saved password.
+                        return changeAdminCode(view, null, false);
+                    }
+                    return verifyAdminFactor(view, Factor.CODE);
+                } catch (IOException ex) {
+                    throw new UncheckedIOException(ex);
+                }
+            });
+        } catch (IOException | RuntimeException ex) {
+            view.showError(ex);
+            return false;
+        }
+    }
+
+    private boolean verifyAdminFactor(Component parent, Factor factor) throws IOException {
+        var attempts = adminAuthService.attempts(factor);
+        if (attempts.lockedSeconds() > 0) {
+            Dialogs.showMessageDialog(parent,
+                    "Administrator authentication is locked. Try again in "
+                            + attempts.lockedSeconds() + " seconds.",
+                    "Admin Account Locked", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+
+        boolean code = factor == Factor.CODE;
+        return AdminLoginDialog.showLogin(parent,
+                code ? "Authentication Code" : "Admin Login",
+                code ? "Authentication Code" : "Administrator password",
+                code ? "code" : "password",
+                value -> {
+                    try {
+                        return adminAuthService.verify(factor, value);
+                    } catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                    }
+                }, attempts.remaining(), AdminAuthService.LOCKOUT_MINUTES);
+    }
+
+    private boolean changeAdminCode(Component parent, byte[] version, boolean generate) throws IOException {
+        char[] code = generate ? adminAuthService.generateCode()
+                : AdminLoginDialog.askNewCode(parent, version == null);
+        if (code == null) {
+            return false;
+        }
+
+        try {
+            adminAuthService.replaceCode(version, code);
+            if (generate) {
+                AdminAccountDialog.showGeneratedCode(parent, code);
+            }
+            return true;
+        } finally {
+            Arrays.fill(code, '\0');
+        }
+    }
+
+    @Override
+    public void logoutAdmin() {
+        adminSession.logout();
+        view.setAdminMode(false);
+    }
+
+    @Override
+    public void openAdminDashboard() {
+        if (!adminSession.isAuthenticated() && !loginAdmin()) {
+            return;
+        }
+        view.setAdminMode(true);
+        view.showAdminEmail(loadAdminProfileEmail());
+    }
+
+    private String loadAdminProfileEmail() {
+        try {
+            return adminEmailRepository.loadOrInitialize();
+        } catch (IOException ex) {
+            view.showError(ex);
+            return "";
+        }
+    }
+
+    @Override
+    public void showAdminSecurity() {
+        tryAction(() -> {
+            requireAdmin();
+            view.showAdminSecurity(AdminAuthService.MAX_ATTEMPTS, AdminAuthService.LOCKOUT_MINUTES);
+        });
+    }
+
+    private void requireAdmin() {
+        adminSession.requireAuthenticated();
+    }
+
+
+    @Override
     public void questionAdmin() {
+        if(view.isCapturePlaying()) return;
 
         tryAction(() -> {
+            requireAdmin();
 
             try {
 
@@ -358,6 +484,7 @@ view.setOpponentSelectionIds(Set.of());
     public void saveQuestion(Question question) {
 
         tryAction(() -> {
+        	 requireAdmin();
 
             try {
 
@@ -397,7 +524,7 @@ view.setOpponentSelectionIds(Set.of());
 
                 );
 
-                JOptionPane.showMessageDialog(
+                Dialogs.showMessageDialog(
 
                     view,
 
@@ -426,10 +553,11 @@ view.setOpponentSelectionIds(Set.of());
     }
 
     @Override
-
     public void deleteQuestion(String questionId) {
-
         tryAction(() -> {
+            requireAdmin();
+
+          
 
             try {
 
@@ -457,7 +585,7 @@ view.setOpponentSelectionIds(Set.of());
 
                 );
 
-                JOptionPane.showMessageDialog(
+                Dialogs.showMessageDialog(
 
                     view,
 
@@ -489,7 +617,7 @@ view.setOpponentSelectionIds(Set.of());
 
     public void roll() {
 
-    	if (resolvingDialog || selectingOpponentPiece) {
+    	if (view.isCapturePlaying() || resolvingDialog || selectingOpponentPiece) {
     	    return;
     	}
 
@@ -517,7 +645,7 @@ view.setOpponentSelectionIds(Set.of());
 
     public void pass() {
 
-    	if (resolvingDialog || selectingOpponentPiece) {
+    	if (view.isCapturePlaying() || resolvingDialog || selectingOpponentPiece) {
     	    return;
     	}
 
@@ -549,6 +677,7 @@ view.setOpponentSelectionIds(Set.of());
     @Override
 
     public void selectPiece(String pieceId) {
+        if(view.isCapturePlaying()) return;
 
 if (selectingOpponentPiece) {
     if (!eligibleOpponentPieceIds.contains(pieceId)) {
@@ -574,11 +703,12 @@ if (selectingOpponentPiece) {
 
         tryAction(() -> {
 
+            CaptureMove.Before before = CaptureMove.observe(session, pieceId);
             GameEngine.MoveFeedback move =
 
                 engine.move(session, pieceId);
 
-            refresh();
+            refreshCapture(before);
 
 
             resolveSpecial(pieceId, move.squareId());
@@ -621,6 +751,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
     OpponentBackwardCommand command =
         new OpponentBackwardCommand(engine, session, opponent, die);
 
+    CaptureMove.Before before = CaptureMove.observe(session, opponentPieceId);
     command.execute();
 
     GameEngine.MoveFeedback result = command.getResult();
@@ -632,7 +763,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
     pendingSurprisePieceId = null;
     view.setOpponentSelectionIds(Set.of());
 
-    refresh();
+    refreshCapture(before);
 
     resolvingDialog = true;
     try {
@@ -770,6 +901,7 @@ private void resolveSpecial(
 
             }
 
+            CaptureMove.Before before = CaptureMove.observe(session, pieceId);
             if (piece.color() != session.current().color()) {
                 engine.resolveOpponentQuestion(
                     session,
@@ -786,7 +918,7 @@ private void resolveSpecial(
                 );
             }
 
-            refresh();
+            refreshCapture(before);
 
             Piece updated = session.findPiece(pieceId);
             if (updated != null
@@ -823,10 +955,11 @@ private void resolveSpecial(
         return;
     }
 
+    CaptureMove.Before before = CaptureMove.observe(session, pieceId);
     GameEngine.SurpriseFeedback feedback =
             engine.applySurprise(session, pieceId, outcome, random);
 
-    refresh();
+    refreshCapture(before);
 
     resolvingDialog = true;
     try {
@@ -885,6 +1018,7 @@ private void resolveSpecial(
     @Override
 
     public void history() {
+        if(view.isCapturePlaying()) return;
 
         tryAction(() -> {
 
@@ -915,8 +1049,9 @@ private void resolveSpecial(
     @Override
 
     public void exportHistory() {
+        if(view.isCapturePlaying()) return;
 
-        JFileChooser chooser = new JFileChooser();
+        JFileChooser chooser = Dialogs.fileChooser();
 
         chooser.setDialogTitle(
 
@@ -962,7 +1097,7 @@ private void resolveSpecial(
 
             int confirm =
 
-                JOptionPane.showConfirmDialog(
+                Dialogs.showConfirmDialog(
 
                     view,
 
@@ -986,7 +1121,7 @@ private void resolveSpecial(
 
             history.export(path);
 
-            JOptionPane.showMessageDialog(
+            Dialogs.showMessageDialog(
 
                 view,
 
@@ -1002,6 +1137,14 @@ private void resolveSpecial(
 
     }
 
+    private void refreshCapture(CaptureMove.Before before) {
+        CaptureMove capture = before.resolved();
+        refresh();
+        if (capture != null && !view.playCapture(capture)) {
+            throw new java.util.concurrent.CancellationException();
+        }
+    }
+
     private void refresh() {
 
         view.render(session);
@@ -1014,6 +1157,8 @@ private void resolveSpecial(
 
             action.run();
 
+        } catch (java.util.concurrent.CancellationException abandonedMatch) {
+            // Leaving the board cancels the rest of this move, including chained dialogs.
         } catch (RuntimeException ex) {
 
             ex.printStackTrace();
@@ -1045,5 +1190,34 @@ private void resolveSpecial(
         }
 
         return eligible;
+    }
+    @Override
+    public void editAdminAccount() {
+        tryAction(() -> {
+            requireAdmin();
+            try {
+                new AdminAccountDialog(view, loadAdminProfileEmail(),
+                        adminAuthService.codeVersion() != null, this::updateAdminCode).setVisible(true);
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
+        });
+    }
+
+    private boolean updateAdminCode(Component parent, boolean generate) {
+        try {
+            requireAdmin();
+            byte[] version = adminAuthService.codeVersion();
+            if (!verifyAdminFactor(parent, Factor.PASSWORD)
+                    || (version != null && !verifyAdminFactor(parent, Factor.CODE))) {
+                return false;
+            }
+            requireAdmin();
+            return changeAdminCode(parent, version, generate);
+        } catch (IOException | RuntimeException ex) {
+            Dialogs.showMessageDialog(parent, ex.getMessage(),
+                    "Admin Security", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
     }
 }
