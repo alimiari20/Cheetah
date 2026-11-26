@@ -474,5 +474,12 @@ public final class HebrewMessages extends ListResourceBundle {
         The credential check could not complete.=>בדיקת פרטי האימות לא הושלמה.
         No login attempts in this period.=>אין ניסיונות כניסה בתקופה זו.
         Security activity could not be read.=>לא ניתן לקרוא את פעילות האבטחה.
+        Human Player=>שחקן אנושי
+        Easy AI=>מחשב קל
+        Medium AI=>מחשב בינוני
+        Hard AI=>מחשב קשה
+        Player {0} control=>סוג שליטה לשחקן {0}
+        AI is thinking…=>המחשב חושב…
+        AI is choosing an opponent piece.=>המחשב בוחר כלי של יריב.
         """;
 }

@@ -10,15 +10,20 @@ import javax.swing.border.EmptyBorder;
 
 import model.Difficulty;
 import model.PlayerColor;
+import model.AiLevel;
 
 /** Returns configuration only; no model mutations happen inside a dialog. */
 public final class SetupDialog {
-    public record Config(Difficulty difficulty, List<String> players, List<PlayerColor> colors) {
+    public record Config(Difficulty difficulty, List<String> players, List<PlayerColor> colors, List<AiLevel> controls) {
         public Config {
             players = List.copyOf(players); colors = List.copyOf(colors);
-            if(players.size()!=colors.size() || players.size()<2 || players.size()>4 ||
+            controls = List.copyOf(controls);
+            if(players.size()!=colors.size() || players.size()!=controls.size() || players.size()<2 || players.size()>4 ||
                   new HashSet<>(colors).size()!=colors.size())
                 throw new IllegalArgumentException("Choose 2–4 players with distinct colors.");
+        }
+        public Config(Difficulty difficulty,List<String> players,List<PlayerColor> colors) {
+            this(difficulty,players,colors,Collections.nCopies(players.size(),AiLevel.HUMAN));
         }
         public Config(Difficulty difficulty,List<String> players) {
             this(difficulty,players,Arrays.asList(PlayerColor.values()).subList(0,players.size()));

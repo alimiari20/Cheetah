@@ -20,6 +20,7 @@ public final class SetupPage extends UiKit.GradientPage {
     private final JButton[] countButtons=new JButton[3];
     private final JButton[] modeButtons=new JButton[3];
     private final JTextField[] names=new JTextField[4];
+    private final List<JComboBox<AiLevel>> controls = new ArrayList<>();
     private final JPanel[] playerRows=new JPanel[4];
     private final PlayerColor[] selectedColors=PlayerColor.values().clone();
     private final ColorDotButton[][] colorButtons=new ColorDotButton[4][4];
@@ -75,7 +76,17 @@ public final class SetupPage extends UiKit.GradientPage {
                 dot.addActionListener(e->chooseColor(rowIndex,chosen));
                 colorButtons[i][j]=dot;choices.add(dot);
             }
-            row.add(choices,BorderLayout.LINE_END);
+            JComboBox<AiLevel> control = new JComboBox<>(AiLevel.values());
+            Messages.renderCombo(control);
+            control.setPreferredSize(new Dimension(114, 28));
+            int player = i + 1;
+            Messages.bind(control, () -> control.getAccessibleContext().setAccessibleName(
+                    Messages.get("Player " + player + " control")));
+            controls.add(control);
+            JPanel options=UiKit.transparent(new FlowLayout(FlowLayout.TRAILING,4,1));
+            options.add(choices);
+            options.add(control);
+            row.add(options,BorderLayout.LINE_END);
             playerRows[i]=row;rows.add(row);
         }
         people.add(rows,BorderLayout.CENTER);people.setMaximumSize(new Dimension(Integer.MAX_VALUE,225));
@@ -151,7 +162,9 @@ public final class SetupPage extends UiKit.GradientPage {
             list.add(name);
         }
         List<PlayerColor> active=new ArrayList<>();for(int i=0;i<playerCount;i++)active.add(selectedColors[i]);
-        onStart.accept(new SetupDialog.Config(difficulty,list,active));
+        List<AiLevel> levels=controls.subList(0,playerCount).stream()
+                .map(box -> (AiLevel) box.getSelectedItem()).toList();
+        onStart.accept(new SetupDialog.Config(difficulty,list,active,levels));
     }
     private static final class ColorDotButton extends JButton {
         private final PlayerColor color;

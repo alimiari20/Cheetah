@@ -35,8 +35,10 @@ public final class GameFrame extends JFrame {
         void questionAdmin();
         void saveQuestion(Question question);
         void deleteQuestion(String questionId);
+        default void gameAvailabilityChanged() {}
     }
     private Actions actions;
+    private java.util.Map<PlayerColor,AiLevel> playerControls = java.util.Map.of();
     private final CardLayout screenLayout=new CardLayout();
     private final JPanel screens=new JPanel(screenLayout);
     private final GlobalHeader header=new GlobalHeader();
@@ -132,11 +134,13 @@ public final class GameFrame extends JFrame {
     @Override public void dispose() {
         boardPanel.cancelCapture();
         clock.stop();
+        currentScreen = "MENU";
+        if (actions != null) actions.gameAvailabilityChanged();
         super.dispose();
     }
     public void setActions(Actions a){actions=Objects.requireNonNull(a);}
     public boolean isGameVisible(){return "GAME".equals(currentScreen);}
-    private void show(String key){if(!"GAME".equals(key)){boardPanel.cancelCapture();clock.stop();if(paused)setPaused(false);}currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();}
+    private void show(String key){if(!"GAME".equals(key)){boardPanel.cancelCapture();clock.stop();if(paused)setPaused(false);}currentScreen=key;screenLayout.show(screens,key);screens.revalidate();screens.repaint();if(actions!=null)actions.gameAvailabilityChanged();}
     public void showMainMenu(){show(adminMode ? "DASHBOARD" : "MENU");}
     public void showSetup(){setupPage.setPreviewProvider((diff,colors)->actions.preview(diff,colors));show("SETUP");}
     public void showGame(){show("GAME");}
@@ -357,8 +361,9 @@ public final class GameFrame extends JFrame {
             case SELECT_PIECE->"CHOOSE A HIGHLIGHTED PIECE";
             case FINISHED->"GAME COMPLETED";
         });Theme.foreground(phaseLabel,session.phase()==GameSession.Phase.FINISHED?ACCENT:SUCCESS);
-        rollButton.setEnabled(session.phase()==GameSession.Phase.ROLL);
-        passButton.setEnabled(session.phase()==GameSession.Phase.SELECT_PIECE&&session.legalPieceIds().isEmpty());
+        boolean automated=playerControls.getOrDefault(player.color(),AiLevel.HUMAN).automated();
+        rollButton.setEnabled(!automated && session.phase()==GameSession.Phase.ROLL);
+        passButton.setEnabled(!automated && session.phase()==GameSession.Phase.SELECT_PIECE&&session.legalPieceIds().isEmpty());
         DiceRoll roll=session.dice();regularFace.setValue(roll==null?0:roll.regular());specialFace.setValue(roll==null?0:roll.special());
         boolean showSpecial=session.difficulty()!=Difficulty.EASY||(roll!=null&&roll.ultraBoost());
         specialDieLabel.setVisible(showSpecial);
@@ -374,6 +379,7 @@ public final class GameFrame extends JFrame {
         // a single message for the player: what to do now, and how far the dice let them move
         String text; Theme.Tone color;
         if (session.phase() == GameSession.Phase.FINISHED) { text = "Game completed!"; color = ACCENT; }
+        else if (automated) { text = "AI is thinking…"; color = ACCENT; }
         else if (session.phase() == GameSession.Phase.ROLL) { text = "Roll the dice!"; color = ACCENT; }
         else if (session.legalPieceIds().isEmpty()) { text = "No legal moves. Pass your turn."; color = DANGER; }
         else { text = null; color = SUCCESS; }
@@ -417,6 +423,7 @@ public final class GameFrame extends JFrame {
         updateClock();
         pauseOverlay.setVisible(pause);
         if(pause)pauseOverlay.focusResume();
+        if(actions!=null)actions.gameAvailabilityChanged();
     }
     public boolean isPaused(){return paused;}
     /** Dark layer over the whole window with a "PAUSED" card and two choices: EXIT GAME or CONTINUE. It swallows all clicks. */
@@ -491,7 +498,8 @@ public final class GameFrame extends JFrame {
             Player p=session.players().get(i);
             boolean active=p==session.current()&&session.phase()!=GameSession.Phase.FINISHED;
             JPanel target=(i%2==0?leftPlayers:rightPlayers);
-            target.add(new PlayerCard(p,active));target.add(Box.createVerticalStrut(12));
+            target.add(new PlayerCard(p,active,playerControls.getOrDefault(p.color(),AiLevel.HUMAN)));
+            target.add(Box.createVerticalStrut(12));
         }
         leftPlayers.revalidate();rightPlayers.revalidate();leftPlayers.repaint();rightPlayers.repaint();
     }
@@ -502,8 +510,9 @@ public final class GameFrame extends JFrame {
      */
     private static final class PlayerCard extends JComponent {
         private final Player player; private final boolean active;
-        PlayerCard(Player player,boolean active){
-            this.player=player;this.active=active;
+        private final AiLevel control;
+        PlayerCard(Player player,boolean active,AiLevel control){
+            this.player=player;this.active=active;this.control=control;
             setPreferredSize(new Dimension(212,96));setMaximumSize(new Dimension(214,96));setAlignmentX(LEFT_ALIGNMENT);
         }
         @Override protected void paintComponent(Graphics g){
@@ -547,6 +556,7 @@ public final class GameFrame extends JFrame {
             d.setFont(Theme.font(10,Font.BOLD));d.setColor(MUTED.color());
             String counts=player.finishedCount()+"/4 HOME   •   "+player.castleCount()+" IN CASTLE";
             counts=Messages.get(counts);
+            if (control.automated()) counts=Messages.get(control.toString())+"  ·  "+counts;
             d.drawString(counts,(w-d.getFontMetrics().stringWidth(counts))/2,top+h-9);
             d.dispose();
         }
@@ -585,6 +595,13 @@ public final class GameFrame extends JFrame {
     }
     public void showSurprise(String message){
         UiKit.notice(this,"SURPRISE EFFECT","✦  SURPRISE SQUARE  ✦",message,"APPLY SURPRISE EFFECT  →");
+    }
+    public void showSurprise(String message, boolean automated){
+        if (!automated) { showSurprise(message); return; }
+        UiKit.notice(this,"SURPRISE EFFECT","✦  SURPRISE SQUARE  ✦",message,"APPLY SURPRISE EFFECT  →",1250);
+    }
+    public void setPlayerControls(java.util.Map<PlayerColor,AiLevel> controls) {
+        playerControls=java.util.Map.copyOf(controls);
     }
     public void showError(Exception ex){Dialogs.showMessageDialog(this,ex.getMessage(),"CHEETAH LUDO  •  ERROR",JOptionPane.ERROR_MESSAGE);}
     private static <T extends AbstractButton> T localizedMenu(T item, String text) {

@@ -38,6 +38,10 @@ public final class GameController
     private final HistoryRepository history;
 
     private final Random random;
+    private final Random aiRandom = new Random();
+    private final Map<PlayerColor, AiLevel> playerControls = new EnumMap<>(PlayerColor.class);
+    private final javax.swing.Timer aiDelay = new javax.swing.Timer(550, event -> runAiTurn());
+    private int actionDepth;
 
     private final QuestionRepository questionRepository =
 
@@ -91,6 +95,7 @@ public final class GameController
         this.history = Objects.requireNonNull(history);
 
         this.random = Objects.requireNonNull(random);
+        aiDelay.setRepeats(false);
 
         this.questions = new QuestionBank(random);
 
@@ -165,6 +170,11 @@ public final class GameController
         }
 
         matchSaved = false;
+        playerControls.clear();
+        for (int i = 0; i < config.colors().size(); i++) {
+            playerControls.put(config.colors().get(i), config.controls().get(i));
+        }
+        view.setPlayerControls(playerControls);
         
 
 selectingOpponentPiece = false;
@@ -270,6 +280,8 @@ view.setOpponentSelectionIds(Set.of());
 
                 config.colors(),
 
+                config.controls(),
+
                 random
 
             );
@@ -317,23 +329,51 @@ view.setOpponentSelectionIds(Set.of());
     }
 
     private boolean confirmLeave(String prompt) {
+        resolvingDialog = true;
+        aiDelay.stop();
+        try {
+            return UiKit.confirm(view, "Exit current game", "LEAVE CURRENT MATCH?",
+                    prompt + "\nYour unfinished progress will not be saved.", "LEAVE GAME");
+        } finally {
+            resolvingDialog = false;
+            gameAvailabilityChanged();
+        }
+    }
 
-        return UiKit.confirm(
+    private AiLevel control(PlayerColor color) {
+        return playerControls.getOrDefault(color, AiLevel.HUMAN);
+    }
 
-            view,
+    private AiLevel activeControl() {
+        if (session == null) return AiLevel.HUMAN;
+        Piece trigger = selectingOpponentPiece ? session.findPiece(pendingSurprisePieceId) : null;
+        return control(trigger == null ? session.current().color() : trigger.color());
+    }
 
-            "Exit current game",
+    private boolean readyForAi() {
+        return actionDepth == 0 && !resolvingDialog && view.isGameVisible() && !view.isPaused()
+                && !view.isCapturePlaying() && session != null && session.phase() != GameSession.Phase.FINISHED
+                && activeControl().automated();
+    }
 
-            "LEAVE CURRENT MATCH?",
+    @Override public void gameAvailabilityChanged() {
+        aiDelay.stop();
+        if (readyForAi()) aiDelay.restart();
+    }
 
-            prompt
-
-                + "\nYour unfinished progress will not be saved.",
-
-            "LEAVE GAME"
-
-        );
-
+    private void runAiTurn() {
+        if (!readyForAi()) return;
+        AiLevel level = activeControl();
+        if (selectingOpponentPiece) {
+            String target = AiMoveStrategy.opponent(level, session, eligibleOpponentPieceIds, aiRandom);
+            performSelection(target);
+        } else if (session.phase() == GameSession.Phase.ROLL) {
+            performRoll();
+        } else if (session.legalPieceIds().isEmpty()) {
+            performPass();
+        } else {
+            performSelection(AiMoveStrategy.forLevel(level).choose(engine, session, aiRandom));
+        }
     }
 
 
@@ -632,7 +672,11 @@ view.setOpponentSelectionIds(Set.of());
     @Override
 
     public void roll() {
+        if (session == null || activeControl().automated()) return;
+        performRoll();
+    }
 
+    private void performRoll() {
     	if (view.isCapturePlaying() || resolvingDialog || selectingOpponentPiece) {
     	    return;
     	}
@@ -660,7 +704,11 @@ view.setOpponentSelectionIds(Set.of());
     @Override
 
     public void pass() {
+        if (session == null || activeControl().automated()) return;
+        performPass();
+    }
 
+    private void performPass() {
     	if (view.isCapturePlaying() || resolvingDialog || selectingOpponentPiece) {
     	    return;
     	}
@@ -680,6 +728,11 @@ view.setOpponentSelectionIds(Set.of());
     @Override
 
     public void selectPiece(String pieceId) {
+        if (session == null || activeControl().automated()) return;
+        performSelection(pieceId);
+    }
+
+    private void performSelection(String pieceId) {
         if(view.isCapturePlaying()) return;
 
 if (selectingOpponentPiece) {
@@ -776,7 +829,7 @@ private void resolveOpponentSelection(String opponentPieceId) {
                 + opponent.color().label()
                 + " piece " + (opponent.number() + 1)
                 + " moved " + Math.abs(result.steps())
-                + " squares backward."
+                + " squares backward.", activeControl().automated()
         );
     } finally {
         resolvingDialog = false;
@@ -890,13 +943,14 @@ private void resolveSpecial(
 
             try {
 
-                correct = QuestionDialog.ask(
-
-                    view,
-
-                    question
-
-                );
+                AiLevel level = control(piece.color());
+                if (level.automated()) {
+                    int answer = AiMoveStrategy.answer(level, question.difficulty(), question.text(),
+                            question.choices(), aiRandom);
+                    correct = QuestionDialog.ask(view, question, answer);
+                } else {
+                    correct = QuestionDialog.ask(view, question);
+                }
 
             } finally {
 
@@ -945,11 +999,13 @@ private void resolveSpecial(
         try {
             if (selectingOpponentPiece) {
                 view.showSurprise(
-                    "Choose a red highlighted opponent piece on the board."
+                    control(piece.color()).automated() ? "AI is choosing an opponent piece."
+                            : "Choose a red highlighted opponent piece on the board.",
+                    control(piece.color()).automated()
                 );
             } else {
                 view.showSurprise(
-                    "No eligible opponent piece. Surprise canceled."
+                    "No eligible opponent piece. Surprise canceled.", control(piece.color()).automated()
                 );
             }
         } finally {
@@ -966,7 +1022,7 @@ private void resolveSpecial(
 
     resolvingDialog = true;
     try {
-        view.showSurprise(feedback.message());
+        view.showSurprise(feedback.message(), control(piece.color()).automated());
     } finally {
         resolvingDialog = false;
     }
@@ -1155,10 +1211,12 @@ private void resolveSpecial(
     }
 
     private void tryAction(Runnable action) {
-
+        actionDepth++;
+        boolean finished = false;
         try {
 
             action.run();
+            finished = true;
 
         } catch (java.util.concurrent.CancellationException abandonedMatch) {
             // Leaving the board cancels the rest of this move, including chained dialogs.
@@ -1168,6 +1226,8 @@ private void resolveSpecial(
 
             view.showError(ex);
 
+        } finally {
+            if (--actionDepth == 0 && finished) gameAvailabilityChanged();
         }
 
     }
