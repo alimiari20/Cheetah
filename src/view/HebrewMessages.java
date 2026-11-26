@@ -524,5 +524,26 @@ public final class HebrewMessages extends ListResourceBundle {
         First-player roll: {0} rolled {1}.=>הגרלת שחקן ראשון: {0} הטיל {1}.
         Game saved, but its replay could not be saved.=>המשחק נשמר. שמירת השידור החוזר נכשלה.
         {0} finished in place {1}!=>{0} סיים במקום {1}!
+        Duplicate question review=>בדיקת כפילות בשאלות
+        Exact duplicate=>שאלה זהה
+        Potential duplicate=>שאלה דומה
+        Similarity: {0} · Existing difficulty: {1}=>דמיון: {0} · רמת קושי של השאלה הקיימת: {1t}
+        This question already exists. Edit the prompt before saving.=>השאלה כבר קיימת. ערכו את הנוסח לפני השמירה.
+        Review both prompts before deciding whether they are intentionally different.=>השוו בין הנוסחים לפני אישור שמירת השאלה כשאלה נפרדת.
+        Existing question=>שאלה קיימת
+        Entered question=>השאלה שהוזנה
+        EDIT QUESTION=>עריכת השאלה
+        SAVE AS INTENTIONALLY DIFFERENT=>אישור שמירה כשאלה נפרדת
+        Analyzing question offline…=>השאלה נבדקת במחשב המקומי…
+        AI Suggest Difficulty=>הצעת רמת קושי
+        Difficulty recommendation=>רמת קושי מומלצת
+        The prompt resembles basic recall and definition questions.=>נוסח השאלה דומה לשאלות של שליפת ידע בסיסי והגדרות.
+        The prompt resembles interpretation, comparison, or application questions.=>נוסח השאלה דומה לשאלות של פרשנות, השוואה או יישום.
+        The prompt resembles analysis or multi-step reasoning questions.=>נוסח השאלה דומה לשאלות של ניתוח או חשיבה רב־שלבית.
+        The answer choices are similar in meaning.=>אפשרויות התשובה דומות במשמעותן.
+        USE RECOMMENDATION=>החלת ההמלצה
+        Enter a question, four answers, and select the correct answer.=>יש להזין שאלה וארבע תשובות ולבחור את התשובה הנכונה.
+        Offline question analysis is unavailable.=>ניתוח השאלות המקומי אינו זמין.
+        The question bank changed during analysis. Please save again.=>מאגר השאלות השתנה במהלך הבדיקה. נסו לשמור שוב.
         """;
 }

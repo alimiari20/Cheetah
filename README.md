@@ -66,7 +66,7 @@ The PDF is a visual prototype with many demonstrations of specific SRS test scen
 ### Prepare the teaching assistant's credentials
 
 1. Choose a unique evaluation password of at least 12 characters and a different random Authentication Code of 16 to 128 characters. Use a password manager to generate and store both values. Keep these credentials separate from your personal administrator credentials.
-2. Deliver **CheetahLudo.jar** through the submission channel. Share the two evaluation credentials privately with the teaching assistant, separately from the submission. The same pair is entered during local setup and subsequent sign-ins.
+2. Deliver **CheetahLudo.jar** with its sibling `lib/` and `model/` directories through the submission channel. Share the two evaluation credentials privately with the teaching assistant, separately from the submission. The same pair is entered during local setup and subsequent sign-ins.
 3. The teaching assistant needs Java 17 or later and a graphical desktop. In a terminal in the folder containing the submitted JAR, run:
 
    ```bash
@@ -84,7 +84,7 @@ Use **Admin Dashboard → Account Settings** to see the code status and change o
 
 The password and code use independent salts and PBKDF2-HMAC-SHA256 with 600,000 iterations. The local account uses `${user.home}/.cheetah-ludo/admin.credentials`. The password and code each have a five-attempt limit and a five-minute lockout that survives restarts. The profile email is informational. Lost codes cannot be recovered from their hashes, so keep a secure copy. Anyone who controls the operating-system user profile or can modify the JAR can replace the local application or its state.
 
-The 32 original questions are bundled. Your locally edited question bank is read at the start of a new game.
+The 36 original Excel questions are bundled. Your locally edited question bank is read at the start of a new game.
 
 ## Where to edit (strict MVC)
 
@@ -121,10 +121,30 @@ Edited questions: `${user.home}/.cheetah-ludo/questions.tsv`
 With Apache Ant installed:
 
 ```bash
+ant prepare-question-ai
 ant clean jar
 ```
 
-Ant runs the eight standalone test programs and rebuilds `dist/CheetahLudo.jar` with the board and question data. To run both the JUnit board-generation tests and the standalone tests, use `mvn test`.
+The preparation target downloads the pinned libraries and verifies the model and tokenizer checksums.
+After preparation, the build, gameplay, and question analysis can run offline.
+Distribute `dist/CheetahLudo.jar` with its sibling `dist/lib/` and `dist/model/` directories.
+Ant runs the standalone regression and question-model tests before packaging. Run
+`ant test-semantic-desktop` on a graphical desktop to also exercise the real editor buttons.
+To run the JUnit board-generation and existing standalone tests together, use `mvn test`.
+In Eclipse, use **Maven → Update Project** after pulling in the dependencies, and run
+`ant prepare-question-ai` from the project root to provision the model for launches from Eclipse.
+
+Question Management checks the editable bank and all original Excel prompts before saving.
+Exact duplicates are blocked. Semantic matches require an explicit save decision.
+**AI Suggest Difficulty** compares a complete draft with cognitive-task examples and labeled bank
+questions, and considers the semantic proximity of the correct answer to its distractors.
+Applying a recommendation changes the difficulty selector. Saving is still a separate action.
+Recommendations are advisory and the bank is too small for calibrated confidence estimates.
+
+Question analysis uses the Apache-2.0 multilingual MiniLM model and DJL tokenizers with the MIT
+ONNX Runtime. The model and tokenizer total about 122 MiB, and the runtime libraries about
+155 MiB. The supplied AVX2 bundle is verified on Windows x64 with Java 17 bytecode.
+Other platforms require compatible native libraries and a matching model variant where needed.
 
 ```bash
 ant run

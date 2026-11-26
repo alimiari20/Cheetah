@@ -38,11 +38,16 @@ public final class QuestionAdminPage extends MenuStyle.Page {
     private final JLabel note=MenuStyle.label("Minimum: 30 questions enforced",11,Font.BOLD,MUTED);
     private final Consumer<Question> saveAction;
     private final Consumer<String> deleteAction;
+    @FunctionalInterface
+    interface SuggestAction { void analyze(String editingId,String prompt,List<String> choices,int correctIndex); }
+    private final SuggestAction suggestAction;
+    private JButton add,delete,save,suggest;
     private List<Question> all=List.of();
     private String editId;
 
-    public QuestionAdminPage(Runnable back,Consumer<Question> saveAction,Consumer<String> deleteAction) {
+    QuestionAdminPage(Runnable back,Consumer<Question> saveAction,Consumer<String> deleteAction,SuggestAction suggestAction) {
         super(new BorderLayout(12,15));this.saveAction=saveAction;this.deleteAction=deleteAction;
+        this.suggestAction=suggestAction;
         setBorder(new EmptyBorder(17,28,19,28));
         JPanel header=UiKit.transparent(new BorderLayout(12,0));
         JButton returnButton=MenuStyle.button("← DASHBOARD",false,back);
@@ -100,11 +105,17 @@ public final class QuestionAdminPage extends MenuStyle.Page {
     private JPanel buildEditor(){
         JPanel outer=MenuStyle.card(new BorderLayout(0,12),16);
         JPanel upper=UiKit.transparent(new BorderLayout(8,0));upper.add(label("ADD / EDIT QUESTION"),BorderLayout.LINE_START);
-        JButton add=MenuStyle.button("+ NEW QUESTION",false,this::beginNew);
+        add=MenuStyle.button("+ NEW QUESTION",false,this::beginNew);
         upper.add(add,BorderLayout.LINE_END);
         outer.add(upper,BorderLayout.NORTH);
         JPanel form=UiKit.transparent();form.setLayout(new BoxLayout(form,BoxLayout.Y_AXIS));
-        form.add(label("DIFFICULTY"));form.add(difficulty);form.add(Box.createVerticalStrut(6));
+        form.add(label("DIFFICULTY"));
+        form.add(difficulty);
+        suggest=MenuStyle.button("AI Suggest Difficulty",false,()->suggestAction.analyze(
+                editId,prompt.getText().strip(),answerValues(),correct.getSelectedIndex()));
+        suggest.setAlignmentX(Component.LEFT_ALIGNMENT);
+        form.add(suggest);
+        form.add(Box.createVerticalStrut(6));
         form.add(label("CATEGORY"));form.add(category);form.add(Box.createVerticalStrut(6));
         form.add(label("QUESTION PROMPT"));form.add(scroll(prompt,75));form.add(Box.createVerticalStrut(6));
         for(int i=0;i<4;i++){
@@ -116,7 +127,8 @@ public final class QuestionAdminPage extends MenuStyle.Page {
         formScroll.setBorder(BorderFactory.createEmptyBorder());formScroll.getVerticalScrollBar().setUnitIncrement(16);
         outer.add(formScroll,BorderLayout.CENTER);
         JPanel buttons=UiKit.transparent(new GridLayout(1,2,10,0));
-        JButton delete=MenuStyle.button("DELETE",false),save=MenuStyle.button("SAVE QUESTION",true,this::save);
+        delete=MenuStyle.button("DELETE",false);
+        save=MenuStyle.button("SAVE QUESTION",true,this::save);
         delete.addActionListener(e->{
             if(editId==null){Dialogs.showMessageDialog(this,"Select an existing question to delete.");return;}
             if(all.size()<=30){Dialogs.showMessageDialog(this,"Cannot delete: the bank must contain at least 30 questions.");return;}
@@ -152,9 +164,22 @@ public final class QuestionAdminPage extends MenuStyle.Page {
         for(int i=0;i<4;i++)options[i].setText(q.choices().get(i));
     }
     private void save(){
-        List<String> values=new ArrayList<>();for(JTextField f:options)values.add(f.getText().trim());
         Question q=new Question(editId==null?"q-local-"+UUID.randomUUID():editId,(Difficulty)difficulty.getSelectedItem(),
-             category.getText().trim(),prompt.getText().trim(),values,correct.getSelectedIndex(),explanation.getText().trim());
+             category.getText().trim(),prompt.getText().trim(),answerValues(),correct.getSelectedIndex(),explanation.getText().trim());
         saveAction.accept(q);
+    }
+
+    private List<String> answerValues() {
+        return Arrays.stream(options).map(field->field.getText().strip()).toList();
+    }
+
+    void applySuggestedDifficulty(Difficulty recommendation) { difficulty.setSelectedItem(recommendation); }
+
+    void analysisBusy(boolean busy) {
+        for(JComponent component:List.of(add,delete,save,suggest,list,search,category,prompt,explanation,difficulty,correct))
+            component.setEnabled(!busy);
+        for(JTextField option:options) option.setEnabled(!busy);
+        if(busy) Messages.set(note,"Analyzing question offline…");
+        else Messages.set(note,all.size()==30?"Minimum 30: deletion disabled":"Minimum 30 • "+(all.size()-30)+" above minimum");
     }
 }

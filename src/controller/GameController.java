@@ -555,81 +555,101 @@ view.setOpponentSelectionIds(Set.of());
 
     }
 
+    private final QuestionAnalysis questionAnalysis = new QuestionAnalysis();
+    private boolean questionAnalysisBusy;
+    private record QuestionSave(List<Question> baseline,List<Question> update,
+                                Optional<QuestionAnalysis.Match> duplicate) {}
+
     @Override
-
-    public void saveQuestion(Question question) {
-
+    public void suggestQuestionDifficulty(String editingId,String prompt,List<String> choices,int correctIndex) {
         tryAction(() -> {
-        	 requireAdmin();
+            requireAdmin();
+            if(questionAnalysisBusy || !view.isQuestionAdminVisible()) return;
+            setQuestionAnalysisBusy(true);
+            new SwingWorker<QuestionAnalysis.DifficultySuggestion,Void>() {
+                @Override protected QuestionAnalysis.DifficultySuggestion doInBackground() throws IOException {
+                    return questionAnalysis.suggest(editingId,prompt,choices,correctIndex,questionRepository.list());
+                }
 
-            try {
-
-                List<Question> list =
-
-                    new ArrayList<>(questionRepository.list());
-
-                int old = -1;
-
-                for (int i = 0; i < list.size(); i++) {
-
-                    if (list.get(i).id().equals(question.id())) {
-
-                        old = i;
-
-                        break;
-
+                @Override protected void done() {
+                    try {
+                        if (!view.isQuestionAdminVisible() || !adminSession.isAuthenticated()) return;
+                        var suggestion=get();
+                        if (QuestionReviewDialog.confirmDifficulty(view,suggestion)
+                                && view.isQuestionAdminVisible() && adminSession.isAuthenticated()) {
+                            view.applySuggestedDifficulty(suggestion.difficulty());
+                        }
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                    } catch (java.util.concurrent.ExecutionException ex) {
+                        view.showError(new IllegalStateException(ex.getCause().getMessage(),ex.getCause()));
+                    } finally {
+                        setQuestionAnalysisBusy(false);
                     }
-
                 }
-
-                if (old >= 0) {
-
-                    list.set(old, question);
-
-                } else {
-
-                    list.add(question);
-
-                }
-
-                questionRepository.saveAll(list);
-
-                view.updateQuestionAdmin(
-
-                    questionRepository.list()
-
-                );
-
-                Dialogs.showMessageDialog(
-
-                    view,
-
-                    "Question saved successfully.",
-
-                    "Question bank",
-
-                    JOptionPane.INFORMATION_MESSAGE
-
-                );
-
-            } catch (IOException ex) {
-
-                throw new IllegalStateException(
-
-                    "Could not save question",
-
-                    ex
-
-                );
-
-            }
-
+            }.execute();
         });
+    }
 
+    @Override
+    public void saveQuestion(Question question) {
+        tryAction(() -> {
+            requireAdmin();
+            if (questionAnalysisBusy || !view.isQuestionAdminVisible()) return;
+            setQuestionAnalysisBusy(true);
+            new SwingWorker<QuestionSave,Void>() {
+                @Override protected QuestionSave doInBackground() throws IOException {
+                    var baseline = questionRepository.list();
+                    var updated = new ArrayList<>(baseline);
+                    int index = -1;
+                    for(int i=0;i<updated.size();i++) if (updated.get(i).id().equals(question.id())) {
+                        index=i;
+                        break;
+                    }
+                    if (index<0) updated.add(question);
+                    else updated.set(index,question);
+                    QuestionRepository.validate(updated);
+                    var candidates = new LinkedHashSet<>(baseline);
+                    candidates.addAll(questionRepository.readExcel());
+                    return new QuestionSave(baseline,updated,questionAnalysis.duplicate(question,List.copyOf(candidates)));
+                }
+
+                @Override protected void done() {
+                    try {
+                        if (!view.isQuestionAdminVisible() || !adminSession.isAuthenticated()) return;
+                        QuestionSave pending=get();
+                        if (pending.duplicate().isPresent()
+                                && !QuestionReviewDialog.confirmDuplicate(view,question,pending.duplicate().get())) return;
+                        requireAdmin();
+                        if (!questionRepository.list().equals(pending.baseline())) {
+                            Dialogs.showMessageDialog(view,"The question bank changed during analysis. Please save again.");
+                            return;
+                        }
+                        questionRepository.saveAll(pending.update());
+                        view.updateQuestionAdmin(questionRepository.list());
+                        Dialogs.showMessageDialog(view,"Question saved successfully.","Question bank",JOptionPane.INFORMATION_MESSAGE);
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                    } catch (java.util.concurrent.ExecutionException ex) {
+                        view.showError(new IllegalStateException(ex.getCause().getMessage(),ex.getCause()));
+                    } catch (IOException | RuntimeException ex) {
+                        view.showError(ex);
+                    } finally {
+                        setQuestionAnalysisBusy(false);
+                    }
+                }
+            }.execute();
+        });
+    }
+
+    private void setQuestionAnalysisBusy(boolean busy) {
+        questionAnalysisBusy=busy;
+        view.setQuestionAnalysisBusy(busy);
     }
 
     @Override
     public void deleteQuestion(String questionId) {
+        if (questionAnalysisBusy) return;
         tryAction(() -> {
             requireAdmin();
 

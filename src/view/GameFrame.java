@@ -35,6 +35,7 @@ public final class GameFrame extends JFrame {
         void exportHistory();
         void questionAdmin();
         void saveQuestion(Question question);
+        default void suggestQuestionDifficulty(String editId,String prompt,List<String> choices,int correct) {}
         void deleteQuestion(String questionId);
         default void gameAvailabilityChanged() {}
     }
@@ -112,7 +113,8 @@ public final class GameFrame extends JFrame {
         screens.add(historyPage,"HISTORY");
         screens.add(replayPage,"REPLAY");
         adminPage=new QuestionAdminPage(()->{if(actions!=null)actions.showMenu();},
-                q->{if(actions!=null)actions.saveQuestion(q);},id->{if(actions!=null)actions.deleteQuestion(id);});
+                q->{if(actions!=null)actions.saveQuestion(q);},id->{if(actions!=null)actions.deleteQuestion(id);},
+                (id,prompt,choices,correct)->{if(actions!=null)actions.suggestQuestionDifficulty(id,prompt,choices,correct);});
         screens.add(adminPage,"ADMIN");
         JPanel shell=GlobalHeader.wrap(screens,header);
         Messages.bind(shell, () -> setTitle(Messages.get("Cheetah Ludo")));
@@ -167,6 +169,9 @@ public final class GameFrame extends JFrame {
     public void markReplayUnavailable(int id){historyPage.markReplayUnavailable(id);}
     public void showReplay(Replay replay){replayPage.open(replay);show("REPLAY");}
     public void showQuestionAdmin(List<Question> questions){adminPage.showQuestions(questions);show("ADMIN");}
+    public boolean isQuestionAdminVisible(){return "ADMIN".equals(currentScreen);}
+    public void setQuestionAnalysisBusy(boolean busy){adminPage.analysisBusy(busy);}
+    public void applySuggestedDifficulty(Difficulty difficulty){adminPage.applySuggestedDifficulty(difficulty);}
     public void updateQuestionAdmin(List<Question> questions){adminPage.showQuestions(questions);}
 
     private void confirmExit() {

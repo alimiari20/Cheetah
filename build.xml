@@ -3,6 +3,51 @@
 
     <property name="build.dir" value="build/classes"/>
     <property name="dist.dir" value="dist"/>
+    <property name="semantic.dir" location="target/question-ai-assets"/>
+    <property name="semantic.repository" value="https://repo.maven.apache.org/maven2"/>
+    <property name="semantic.model.source" value="https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2/resolve/main"/>
+    <property name="semantic.model.variant" value="model_quint8_avx2.onnx"/>
+    <property name="semantic.model.sha256" value="98a01d88b7de996cdea58c32ca71208c09968d143798814b2ea09d3439dc334f"/>
+    <property name="semantic.external.classpath" value=""/>
+    <path id="semantic.libraries">
+        <pathelement path="${semantic.external.classpath}"/>
+        <fileset dir="${semantic.dir}/lib" includes="*.jar" erroronmissingdir="false"/>
+    </path>
+
+    <macrodef name="semantic-library">
+        <attribute name="artifact"/>
+        <attribute name="group"/>
+        <attribute name="version"/>
+        <sequential>
+            <get src="${semantic.repository}/@{group}/@{artifact}/@{version}/@{artifact}-@{version}.jar"
+                 dest="${semantic.dir}/lib/@{artifact}-@{version}.jar" skipexisting="true"/>
+        </sequential>
+    </macrodef>
+
+    <target name="prepare-question-ai">
+        <mkdir dir="${semantic.dir}/lib"/>
+        <mkdir dir="${semantic.dir}/model"/>
+        <semantic-library group="com/microsoft/onnxruntime" artifact="onnxruntime" version="1.22.0"/>
+        <semantic-library group="ai/djl/huggingface" artifact="tokenizers" version="0.33.0"/>
+        <semantic-library group="ai/djl" artifact="api" version="0.33.0"/>
+        <semantic-library group="com/google/code/gson" artifact="gson" version="2.13.1"/>
+        <semantic-library group="net/java/dev/jna" artifact="jna" version="5.14.0"/>
+        <semantic-library group="org/apache/commons" artifact="commons-compress" version="1.27.1"/>
+        <semantic-library group="commons-codec" artifact="commons-codec" version="1.17.1"/>
+        <semantic-library group="commons-io" artifact="commons-io" version="2.16.1"/>
+        <semantic-library group="org/slf4j" artifact="slf4j-api" version="2.0.17"/>
+        <get src="${semantic.model.source}/onnx/${semantic.model.variant}" dest="${semantic.dir}/model/model.onnx" skipexisting="true"/>
+        <get src="${semantic.model.source}/tokenizer.json" dest="${semantic.dir}/model/tokenizer.json" skipexisting="true"/>
+        <get src="https://www.apache.org/licenses/LICENSE-2.0.txt" dest="${semantic.dir}/model/LICENSE.txt" skipexisting="true"/>
+        <checksum file="${semantic.dir}/model/model.onnx" algorithm="SHA-256" property="semantic.model.actual"/>
+        <checksum file="${semantic.dir}/model/tokenizer.json" algorithm="SHA-256" property="semantic.tokenizer.actual"/>
+        <fail message="Question AI assets failed their SHA-256 check.">
+            <condition><not><and>
+                <equals arg1="${semantic.model.actual}" arg2="${semantic.model.sha256}" casesensitive="false"/>
+                <equals arg1="${semantic.tokenizer.actual}" arg2="2c3387be76557bd40970cec13153b3bbf80407865484b209e655e5e4729076b8" casesensitive="false"/>
+            </and></not></condition>
+        </fail>
+    </target>
 
     <target name="clean">
         <delete dir="build"/>
@@ -15,6 +60,7 @@
                release="17"
                encoding="UTF-8"
                includeantruntime="false"
+               classpathref="semantic.libraries"
                debug="true"/>
         <copy todir="${build.dir}">
             <fileset dir="src" excludes="**/*.java"/>
@@ -30,6 +76,7 @@
                debug="true">
             <classpath>
                 <pathelement location="${build.dir}"/>
+                <path refid="semantic.libraries"/>
             </classpath>
         </javac>
 
@@ -110,21 +157,50 @@
         </java>
     </target>
 
-    <target name="jar" depends="test">
+    <target name="test-semantic" depends="test">
+        <java classname="model.QuestionAnalysisTests" fork="true" failonerror="true">
+            <sysproperty key="cheetah.questionModel" value="${semantic.dir}/model"/>
+            <classpath><pathelement location="${build.dir}"/><path refid="semantic.libraries"/></classpath>
+        </java>
+    </target>
+
+    <target name="test-difficulty" depends="test-semantic">
+        <java classname="model.QuestionDifficultyTests" fork="true" failonerror="true">
+            <sysproperty key="cheetah.questionModel" value="${semantic.dir}/model"/>
+            <classpath><pathelement location="${build.dir}"/><path refid="semantic.libraries"/></classpath>
+        </java>
+    </target>
+
+    <target name="test-semantic-desktop" depends="test-difficulty">
+        <java classname="view.QuestionEditorWorkflowTests" fork="true" failonerror="true">
+            <sysproperty key="cheetah.questionModel" value="${semantic.dir}/model"/>
+            <classpath><pathelement location="${build.dir}"/><path refid="semantic.libraries"/></classpath>
+        </java>
+    </target>
+
+    <target name="jar" depends="test-difficulty">
         <mkdir dir="${dist.dir}"/>
+        <copy todir="${dist.dir}/lib"><fileset dir="${semantic.dir}/lib" includes="*.jar"/></copy>
+        <copy todir="${dist.dir}/model"><fileset dir="${semantic.dir}/model"/></copy>
+        <manifestclasspath property="semantic.manifest.classpath" jarfile="${dist.dir}/CheetahLudo.jar">
+            <classpath><fileset dir="${dist.dir}/lib" includes="*.jar"/></classpath>
+        </manifestclasspath>
         <jar destfile="${dist.dir}/CheetahLudo.jar"
              basedir="${build.dir}"
              excludes="**/*Tests*.class">
             <manifest>
                 <attribute name="Main-Class" value="com.cheetahludo.Main"/>
+                <attribute name="Class-Path" value="${semantic.manifest.classpath}"/>
             </manifest>
         </jar>
     </target>
 
     <target name="run" depends="compile">
         <java classname="com.cheetahludo.Main" fork="true">
+            <sysproperty key="cheetah.questionModel" value="${semantic.dir}/model"/>
             <classpath>
                 <pathelement location="${build.dir}"/>
+                <path refid="semantic.libraries"/>
             </classpath>
         </java>
     </target>
