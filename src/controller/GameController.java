@@ -745,7 +745,7 @@ view.setOpponentSelectionIds(Set.of());
     @Override
 
     public void pass() {
-        if (session == null || activeControl().automated()) return;
+        if (!canRunHumanTimerAction()) return;
         performPass();
     }
 
@@ -766,6 +766,26 @@ view.setOpponentSelectionIds(Set.of());
 
         });
 
+    }
+
+    private boolean canRunHumanTimerAction() {
+        return actionDepth == 0 && !resolvingDialog && !selectingOpponentPiece
+                && view.isGameVisible() && !view.isPaused() && !view.isCapturePlaying()
+                && session != null && session.phase() != GameSession.Phase.FINISHED
+                && !activeControl().automated();
+    }
+
+    /** The current player's 30 seconds are over: skip the rest of the turn. */
+    @Override
+    public void timeOut() {
+        if (!canRunHumanTimerAction()) return;
+        tryAction(() -> {
+            engine.timeOut(session);
+            delegatedEffects.keySet().removeIf(depth -> depth > session.temporaryEffectDepth());
+            recorder.record(Replay.Kind.TURN);
+            refresh();
+            postMatchCheck();
+        });
     }
 
     @Override

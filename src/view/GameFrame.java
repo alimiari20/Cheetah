@@ -29,6 +29,7 @@ public final class GameFrame extends JFrame {
         void editAdminAccount();
         void roll();
         void pass();
+        void timeOut();
         void selectPiece(String id);
         void history();
         default void watchReplay(HistoryRepository.Entry entry) {}
@@ -73,7 +74,18 @@ public final class GameFrame extends JFrame {
     private final JLabel phaseLabel=Theme.label("READY TO ROLL",12,Font.BOLD,SUCCESS);
     private final JLabel instruction=Theme.label("Choose Roll Dice to begin",13,Font.BOLD,MUTED);
     private final JButton rollButton=Theme.button("ROLL DICE  ⚄",true);
-    private final JButton passButton=Theme.button("PASS TURN",false);
+    // no pass button: with no legal move the turn passes by itself after a short moment
+    private static final int AUTO_PASS_MILLIS=1500;
+    // turn timer: each player has 30 seconds; a coloured line around their card runs down
+    private static final int TURN_SECONDS=30;
+    private final Timer turnTimer=new Timer(40,e->tickTurnTimer());
+    private GameSession timerSession;
+    private Player timerPlayer;
+    private int timerTurn,timerEffectDepth;
+    private GameSession.Phase timerPhase;
+    private long turnElapsed,noMoveElapsed,lastTick;
+    private boolean renderedAutomated,selectingOpponent;
+    private PlayerCard activeCard;
     private final JPanel leftPlayers=UiKit.transparent();
     private final JPanel rightPlayers=UiKit.transparent();
     private final DieFace regularFace=new DieFace(),specialFace=new DieFace();
@@ -121,9 +133,7 @@ public final class GameFrame extends JFrame {
         setContentPane(shell);
         boardPanel.setOnSelect(id->{if(actions!=null)actions.selectPiece(id);});
         rollButton.addActionListener(e->{if(actions!=null)actions.roll();});
-        passButton.addActionListener(e->{if(actions!=null)actions.pass();});
         bindShortcut(KeyEvent.VK_R,"roll",()->{if(actions!=null && isGameVisible() && !paused)actions.roll();});
-        bindShortcut(KeyEvent.VK_P,"pass",()->{if(actions!=null && isGameVisible() && !paused)actions.pass();});
         bindShortcut(KeyEvent.VK_ESCAPE,"pause",()->{if(isGameVisible())setPaused(!paused);});
         setGlassPane(pauseOverlay);
         buildMenu();
@@ -138,19 +148,29 @@ public final class GameFrame extends JFrame {
         setVisible(true);
     }
     @Override public void dispose() {
+        currentScreen = "MENU";
+        stopTurnTimer();
         replayPage.close();
         boardPanel.cancelCapture();
         clock.stop();
-        currentScreen = "MENU";
         if (actions != null) actions.gameAvailabilityChanged();
         super.dispose();
     }
     public void setActions(Actions a){actions=Objects.requireNonNull(a);}
     public boolean isGameVisible(){return "GAME".equals(currentScreen);}
     private void show(String key){
-        if(!"REPLAY".equals(key))replayPage.close();
-        if(!"GAME".equals(key)){boardPanel.cancelCapture();clock.stop();if(paused)setPaused(false);}
         currentScreen=key;
+        if(!"REPLAY".equals(key))replayPage.close();
+        if(!isGameVisible()){
+            stopTurnTimer();
+            clock.stop();
+            boardPanel.cancelCapture();
+            if(paused)setPaused(false);
+        }else if(clockSession!=null){
+            updateTurnTimer(clockSession,renderedAutomated);
+            updatePlayers(clockSession);
+            if(!paused && clockSession.phase()!=GameSession.Phase.FINISHED)clock.start();
+        }
         newGameMenuItem.setEnabled(!adminMode && !"REPLAY".equals(key));
         screenLayout.show(screens,key);
         screens.revalidate();
@@ -227,10 +247,9 @@ public final class GameFrame extends JFrame {
         // one clear message under the dice (what to do now and how far you can move)
         instruction.setHorizontalAlignment(SwingConstants.CENTER);instruction.setFont(Theme.font(14,Font.BOLD));
         c.insets=new Insets(10,0,4,0);diceCard.add(instruction,c);
-        rollButton.setPreferredSize(new Dimension(190,46));passButton.setPreferredSize(new Dimension(190,40));
+        rollButton.setPreferredSize(new Dimension(190,46));
         c.insets=new Insets(8,0,8,0);diceCard.add(rollButton,c);
-        c.insets=new Insets(0,0,0,0);diceCard.add(passButton,c);
-        c.weighty=1;diceCard.add(Box.createVerticalGlue(),c);
+        c.insets=new Insets(0,0,0,0);c.weighty=1;diceCard.add(Box.createVerticalGlue(),c);
         root.add(sideColumn(leftPlayers,diceCard),BorderLayout.LINE_START);
 
         // right side: players + the history of the game, as long as there is room
@@ -322,6 +341,7 @@ public final class GameFrame extends JFrame {
             return roll+(m.group(4).startsWith("No")?" <span style='color:" + hex(DANGER.color()) + "'>— no move possible</span>":"");
         }
         if(rest.startsWith("has no legal move")) return "<span style='color:" + hex(DANGER.color()) + "'>passed the turn (no move)</span>";
+        if(rest.startsWith("ran out of time")) return "<span style='color:" + hex(DANGER.color()) + "'>ran out of time — turn skipped</span>";
         if((m=java.util.regex.Pattern.compile("entered the board with piece (\\d)(.*)").matcher(rest)).find())
             return "<b>"+hero(m.group(1))+"</b> left the castle"+extras(m.group(2));
         if((m=java.util.regex.Pattern.compile("moved piece (\\d) by (\\d+) squares(.*)").matcher(rest)).find())
@@ -391,8 +411,8 @@ public final class GameFrame extends JFrame {
             case SELECT_PIECE->"CHOOSE A HIGHLIGHTED PIECE";
             case FINISHED->"GAME COMPLETED";
         });Theme.foreground(phaseLabel,session.phase()==GameSession.Phase.FINISHED?ACCENT:SUCCESS);
+        renderedAutomated=automated;
         rollButton.setEnabled(!automated && session.phase()==GameSession.Phase.ROLL);
-        passButton.setEnabled(!automated && session.phase()==GameSession.Phase.SELECT_PIECE&&session.legalPieceIds().isEmpty());
         DiceRoll roll=session.dice();regularFace.setValue(roll==null?0:roll.regular());specialFace.setValue(roll==null?0:roll.special());
         boolean showSpecial=session.difficulty()!=Difficulty.EASY||(roll!=null&&roll.ultraBoost());
         specialDieLabel.setVisible(showSpecial);
@@ -410,7 +430,7 @@ public final class GameFrame extends JFrame {
         if (session.phase() == GameSession.Phase.FINISHED) { text = "Game completed!"; color = ACCENT; }
         else if (automated) { text = "AI is thinking…"; color = ACCENT; }
         else if (session.phase() == GameSession.Phase.ROLL) { text = "Roll the dice!"; color = ACCENT; }
-        else if (session.legalPieceIds().isEmpty()) { text = "No legal moves. Pass your turn."; color = DANGER; }
+        else if (session.legalPieceIds().isEmpty()) { text = "No legal moves. Passing the turn…"; color = DANGER; }
         else { text = null; color = SUCCESS; }
         Messages.bind(instruction, () -> {
             String moves=availableMovesText(session);
@@ -423,10 +443,12 @@ public final class GameFrame extends JFrame {
         Theme.foreground(instruction,color);
 
         updateHistory(session);
+        updateTurnTimer(session,automated);
         updatePlayers(session);
         if(clockSession!=session){pausedMillis=0;if(paused)setPaused(false);}   // a new game starts with no paused time
         clockSession=session;updateClock();
-        if(session.phase()==GameSession.Phase.FINISHED)clock.stop();else if(!clock.isRunning())clock.start();
+        if(!isGameVisible() || paused || session.phase()==GameSession.Phase.FINISHED)clock.stop();
+        else if(!clock.isRunning())clock.start();
         arenaRepaint();
     }
     /** Lets a centred label wrap onto two lines instead of being cut with "...". */
@@ -436,19 +458,20 @@ public final class GameFrame extends JFrame {
     }
     /** Pauses or resumes the game: the overlay blocks the screen and the clock stops counting. */
     public boolean playCapture(CaptureMove move){
-        boolean rollEnabled=rollButton.isEnabled(),passEnabled=passButton.isEnabled();
-        rollButton.setEnabled(false);passButton.setEnabled(false);
+        boolean rollEnabled=rollButton.isEnabled();
+        rollButton.setEnabled(false);
         try{return boardPanel.playCapture(move, 1.0);}
-        finally{rollButton.setEnabled(rollEnabled);passButton.setEnabled(passEnabled);}
+        finally{rollButton.setEnabled(rollEnabled);}
     }
     public boolean isCapturePlaying(){return boardPanel.isCapturePlaying();}
     public void setPaused(boolean pause){
         if(isCapturePlaying())return;
         if(pause==paused)return;
         paused=pause;
+        lastTick=monotonicMillis();
         if(pause){pauseStartedAt=System.currentTimeMillis();clock.stop();}
         else{pausedMillis+=System.currentTimeMillis()-pauseStartedAt;
-             if(clockSession!=null && clockSession.phase()!=GameSession.Phase.FINISHED)clock.start();}
+             if(isGameVisible() && clockSession!=null && clockSession.phase()!=GameSession.Phase.FINISHED)clock.start();}
         updateClock();
         pauseOverlay.setVisible(pause);
         if(pause)pauseOverlay.focusResume();
@@ -523,37 +546,126 @@ public final class GameFrame extends JFrame {
     }
     private void updatePlayers(GameSession session){
         leftPlayers.removeAll();rightPlayers.removeAll();
+        boolean running=session.phase()!=GameSession.Phase.FINISHED;
+        activeCard=null;
         for(int i=0;i<session.players().size();i++){
             Player p=session.players().get(i);
-            boolean active=p==session.current()&&session.phase()!=GameSession.Phase.FINISHED;
+            boolean active=p==session.current()&&running;
             JPanel target=(i%2==0?leftPlayers:rightPlayers);
-            target.add(new PlayerCard(p,active,playerControls.getOrDefault(p.color(),AiLevel.HUMAN)));
+            PlayerCard card=new PlayerCard(p,active,running&&!active,
+                    playerControls.getOrDefault(p.color(),AiLevel.HUMAN));
+            if(active && timerSession==session){
+                card.remaining=turnRemaining();
+                activeCard=card;
+            }
+            target.add(card);
             target.add(Box.createVerticalStrut(12));
         }
         leftPlayers.revalidate();rightPlayers.revalidate();leftPlayers.repaint();rightPlayers.repaint();
+    }
+    /** Restarts the 30 seconds when a new player starts, or the same player gets a new roll (for example after a 6). */
+    private void updateTurnTimer(GameSession session,boolean automated){
+        if(!isGameVisible() || automated || selectingOpponent || session.phase()==GameSession.Phase.FINISHED){
+            stopTurnTimer();
+            return;
+        }
+        if(!sameTimedTurn(session) || (session.phase()==GameSession.Phase.ROLL && timerPhase!=GameSession.Phase.ROLL)){
+            turnElapsed=0;
+            noMoveElapsed=0;
+            lastTick=monotonicMillis();
+        }
+        if(timerPhase!=session.phase()){
+            noMoveElapsed=0;
+            lastTick=monotonicMillis();
+        }
+        timerSession=session;
+        timerPlayer=session.current();
+        timerTurn=session.turn();
+        timerEffectDepth=session.temporaryEffectDepth();
+        timerPhase=session.phase();
+        if(!turnTimer.isRunning())turnTimer.start();
+    }
+
+    private boolean sameTimedTurn(GameSession session){
+        return session==timerSession && session.current()==timerPlayer && session.turn()==timerTurn
+                && session.temporaryEffectDepth()==timerEffectDepth;
+    }
+
+    private void stopTurnTimer(){
+        turnTimer.stop();
+        timerSession=null;
+        timerPlayer=null;
+        timerPhase=null;
+        turnElapsed=0;
+        noMoveElapsed=0;
+        activeCard=null;
+    }
+
+    private static long monotonicMillis(){
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+    }
+    /** Part of the turn time still left, from 1 (full) to 0. */
+    private double turnRemaining(){return Math.max(0,1-turnElapsed/(TURN_SECONDS*1000.0));}
+    private void tickTurnTimer(){
+        long now=monotonicMillis(),passed=now-lastTick;lastTick=now;
+        if(timerSession==null || !isGameVisible() || renderedAutomated || selectingOpponent
+                || !sameTimedTurn(timerSession) || timerSession.phase()!=timerPhase)return;
+        // the time stands still while the game is paused or a window (question, surprise...) is open over the game
+        if(paused||!isActive()||isCapturePlaying()||actions==null)return;
+        turnElapsed+=passed;
+        if(activeCard!=null){activeCard.remaining=turnRemaining();activeCard.repaint();}
+        if(turnElapsed>=TURN_SECONDS*1000L){
+            turnElapsed=0;
+            noMoveElapsed=0;
+            actions.timeOut();
+        }else if(timerPhase==GameSession.Phase.SELECT_PIECE && timerSession.legalPieceIds().isEmpty()){
+            noMoveElapsed+=passed;
+            if(noMoveElapsed>=AUTO_PASS_MILLIS){
+                noMoveElapsed=0;
+                actions.pass();
+            }
+        }
     }
     /**
      * Player card: the name on a ribbon in the player's colour and the player's four heroes.
      * Heroes still in the castle are bright; a hero that left the castle is shown switched off (pale),
      * and one that reached home also gets a gold star.
+     * The player whose turn it is glows and has the timer line around the card; the others are dimmed.
      */
     private static final class PlayerCard extends JComponent {
-        private final Player player; private final boolean active;
+        private final Player player;
+        private final boolean active,dimmed;
         private final AiLevel control;
-        PlayerCard(Player player,boolean active,AiLevel control){
-            this.player=player;this.active=active;this.control=control;
+        private double remaining=-1; // No countdown on inactive cards or automated turns.
+
+        PlayerCard(Player player,boolean active,boolean dimmed,AiLevel control){
+            this.player=player;
+            this.active=active;
+            this.dimmed=dimmed;
+            this.control=control;
             setPreferredSize(new Dimension(212,96));setMaximumSize(new Dimension(214,96));setAlignmentX(LEFT_ALIGNMENT);
         }
         @Override protected void paintComponent(Graphics g){
             Graphics2D d=(Graphics2D)g.create();
             d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
             d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            float light=dimmed?.4f:1f;                                    // dimmed cards are drawn see-through
+            d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,light));
             int w=getWidth()-4,h=getHeight()-6,top=6;
             Color team=Theme.player(player.color());
             d.setColor(SHADOW.color());d.fill(new RoundRectangle2D.Double(1,top+4,w,h-2,16,16));
-            d.setColor(SURFACE.color());d.fill(new RoundRectangle2D.Double(0,top,w,h-2,16,16));
-            d.setColor(active?team:BORDER.color());d.setStroke(new BasicStroke(active?3f:1f));
-            d.draw(new RoundRectangle2D.Double(1,top+1,w-2,h-4,16,16));
+            d.setColor(active?Theme.blend(SURFACE.color(),team,.18f):SURFACE.color());   // the active card is tinted with its team colour
+            d.fill(new RoundRectangle2D.Double(0,top,w,h-2,16,16));
+            if(active){                                                   // soft glow in the team colour
+                d.setColor(new Color(team.getRed(),team.getGreen(),team.getBlue(),70));d.setStroke(new BasicStroke(5f));
+                d.draw(new RoundRectangle2D.Double(1,top+1,w-2,h-4,16,16));
+                d.setColor(BORDER.color());d.setStroke(new BasicStroke(1f));
+                d.draw(new RoundRectangle2D.Double(1,top+1,w-2,h-4,16,16));
+                if(remaining>=0) drawTimerLine(d,team,1,top+1,w-2,h-4);
+            } else {
+                d.setColor(BORDER.color());d.setStroke(new BasicStroke(1f));
+                d.draw(new RoundRectangle2D.Double(1,top+1,w-2,h-4,16,16));
+            }
             // name ribbon
             d.setColor(team);d.fill(new RoundRectangle2D.Double(10,top+8,w-20,24,10,10));
             d.setColor(Theme.teamInk(team));d.setFont(Theme.font(13,Font.BOLD));
@@ -576,7 +688,7 @@ public final class GameFrame extends JFrame {
                 java.awt.image.BufferedImage img=new java.awt.image.BufferedImage(64,64,java.awt.image.BufferedImage.TYPE_INT_ARGB);
                 Graphics2D h2=img.createGraphics();BoardPanel.paintHero(h2,piece.number(),team,32,32,28,false);h2.dispose();
                 Composite old=d.getComposite();
-                if(out) d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,.3f));    // left the castle: shown switched off
+                if(out) d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,.3f*light));    // left the castle: shown switched off
                 d.drawImage(img,(int)Math.round(cx-32),(int)Math.round(cy-32),null);
                 d.setComposite(old);
                 if(home){d.setColor(ACCENT.color());d.setFont(Theme.font(15,Font.BOLD));d.drawString("★",(int)cx-6,(int)cy+6);}
@@ -585,9 +697,34 @@ public final class GameFrame extends JFrame {
             d.setFont(Theme.font(10,Font.BOLD));d.setColor(MUTED.color());
             String counts=player.finishedCount()+"/4 HOME   •   "+player.castleCount()+" IN CASTLE";
             counts=Messages.get(counts);
-            if (control.automated()) counts=Messages.get(control.toString())+"  ·  "+counts;
+            counts=Messages.get(control.toString())+"  ·  "+counts;
             d.drawString(counts,(w-d.getFontMetrics().stringWidth(counts))/2,top+h-9);
             d.dispose();
+        }
+        /** The time line: starts full around the card at the top centre and shrinks clockwise; red in the last 10 seconds. */
+        private void drawTimerLine(Graphics2D d,Color team,double x,double y,double w,double h){
+            double r=8;
+            Path2D edge=new Path2D.Double();
+            edge.moveTo(x+w/2,y);
+            edge.lineTo(x+w-r,y);edge.quadTo(x+w,y,x+w,y+r);
+            edge.lineTo(x+w,y+h-r);edge.quadTo(x+w,y+h,x+w-r,y+h);
+            edge.lineTo(x+r,y+h);edge.quadTo(x,y+h,x,y+h-r);
+            edge.lineTo(x,y+r);edge.quadTo(x,y,x+r,y);
+            edge.closePath();
+            double length=0,lx=0,ly=0,sx=0,sy=0;double[] p=new double[6];
+            for(PathIterator it=edge.getPathIterator(null,.5);!it.isDone();it.next()){   // measure the whole edge
+                int type=it.currentSegment(p);
+                if(type==PathIterator.SEG_MOVETO){sx=lx=p[0];sy=ly=p[1];continue;}
+                if(type==PathIterator.SEG_CLOSE){p[0]=sx;p[1]=sy;}
+                length+=Math.hypot(p[0]-lx,p[1]-ly);lx=p[0];ly=p[1];
+            }
+            float shown=(float)(length*remaining);
+            if(shown<=0.5f)return;
+            boolean hurry=remaining*TURN_SECONDS<=10;
+            d.setColor(hurry?new Color(255,70,80):team);
+            d.setStroke(new BasicStroke(4f,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND,10f,
+                    new float[]{shown,(float)length+20f},0f));
+            d.draw(edge);
         }
     }
     public void showMatchEnd(GameSession session,String persistenceMessage){
@@ -664,7 +801,9 @@ public final class GameFrame extends JFrame {
           "Medium: regular die × (boost − 1). Hard: regular die × (UltraBoost − 1).\n\n"+
           "Protected star squares prevent captures. Double blocks stop opponent pieces from passing.\n\n"+
           "Question squares ask a question and move you forward/backward. Surprise squares have random effects.\n\n"+
-          "Win by getting all four pieces Home. Keyboard: R rolls dice, P passes when permitted.");
+          "Each human turn has "+TURN_SECONDS+" seconds (the line around your card); when time runs out the turn is skipped. "+
+          "With no legal move the turn passes by itself.\n\n"+
+          "Win by getting all four pieces Home. Keyboard: R rolls dice, Esc pauses.");
     }
     private void bindShortcut(int key,String id,Runnable action){
         getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(key,0),id);
@@ -688,6 +827,8 @@ public final class GameFrame extends JFrame {
         }
     }
     public void setOpponentSelectionIds(Set<String> ids) {
+        selectingOpponent=!ids.isEmpty();
+        if(selectingOpponent)stopTurnTimer();
         boardPanel.setOpponentSelectionIds(ids);
     }
 
