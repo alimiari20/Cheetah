@@ -794,8 +794,8 @@ public final class GameFrame extends JFrame {
         help.add(rules);b.add(game);b.add(help);setJMenuBar(b);
     }
 
-    private void showRules() {
-        showInfo("HOW TO PLAY",
+    void showRules() {
+        RulesDialog.show(this,
           "Roll 6 to bring a piece out of its castle. A six grants an extra roll, but three consecutive sixes end the turn.\n\n"+
           "Click one highlighted piece to move. You need an exact roll to reach Home.\n\n"+
           "Medium: regular die × (boost − 1). Hard: regular die × (UltraBoost − 1).\n\n"+
@@ -809,7 +809,7 @@ public final class GameFrame extends JFrame {
         getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(key,0),id);
         getRootPane().getActionMap().put(id,new AbstractAction(){public void actionPerformed(ActionEvent e){action.run();}});
     }
-    private static final class DieFace extends JComponent {
+    static final class DieFace extends JComponent {
         private int value;
         DieFace(){setPreferredSize(new Dimension(62,62));}
         void setValue(int v){value=v;repaint();}

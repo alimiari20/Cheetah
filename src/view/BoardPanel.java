@@ -16,6 +16,13 @@ public final class BoardPanel extends JPanel {
     private static final Color TRACK = new Color(251, 252, 255);
     private GameSession session;
     private CapturePlayback playback;
+    private final boolean interactive;
+    private List<String> tutorialHighlights = List.of();
+    private Piece tutorialActor;
+    private List<CaptureAnimation.Point> tutorialRoute = List.of();
+    private CaptureAnimation tutorialCapture;
+    private Piece tutorialVictim;
+    private double tutorialProgress = 1;
 
     public boolean isCapturePlaying() { return playback != null; }
 
@@ -36,14 +43,17 @@ public final class BoardPanel extends JPanel {
 
     @Override public void addNotify() {
         super.addNotify();
-        lifeTimer.start();
-        glowTimer.start();
+        if (interactive) {
+            lifeTimer.start();
+            glowTimer.start();
+        }
     }
 
     @Override public void removeNotify() {
         cancelCapture();
         lifeTimer.stop();
         glowTimer.stop();
+        hopTimer.stop();
         super.removeNotify();
     }
 
@@ -66,9 +76,15 @@ public final class BoardPanel extends JPanel {
         boolean contains(double px, double py) { return Math.hypot(px - x, py - y) <= radius; }
     }
     public BoardPanel() {
+        this(true);
+    }
+
+    BoardPanel(boolean interactive) {
+        this.interactive = interactive;
         setOpaque(false);
         setBackground(new Color(21, 49, 116));
         setPreferredSize(new Dimension(710,710));
+        if (!interactive) return;
         MouseAdapter mouse = new MouseAdapter() {
         	@Override
         	public void mouseClicked(MouseEvent e) {
@@ -103,6 +119,47 @@ public final class BoardPanel extends JPanel {
         addMouseMotionListener(mouse);
     }
     public void setOnSelect(Consumer<String> callback) { onSelect=Objects.requireNonNull(callback); }
+
+    void setTutorialMotion(Piece actor, Piece victim, List<String> route, List<String> highlights) {
+        tutorialActor = actor;
+        tutorialVictim = victim;
+        tutorialHighlights = highlights;
+        var squares = route.stream().map(Board.Position::parse).toList();
+        tutorialRoute = squares.stream()
+                .map(p -> new CaptureAnimation.Point(p.column() - .5, p.row() - .5)).toList();
+        if (actor != null && actor.state() == Piece.State.CASTLE) {
+            var yard = castleArea(session.board(), actor.color(), 0, 0, 1);
+            var slot = yardSpot(yard, actor.number());
+            tutorialRoute = List.of(new CaptureAnimation.Point(slot[0], slot[1]), tutorialRoute.get(1));
+        }
+        tutorialCapture = victim == null ? null
+                : new CaptureAnimation(new CaptureMove(actor, squares, List.of(victim)), session.board());
+        repaint();
+    }
+
+    void setTutorialProgress(double progress) {
+        if (progress == tutorialProgress) return;
+        tutorialProgress = progress;
+        repaint();
+    }
+
+    private boolean hidesTutorialPiece(Piece piece) {
+        return tutorialProgress >= 0 && tutorialProgress < 1 && (piece == tutorialActor || piece == tutorialVictim);
+    }
+
+    private void paintTutorial(Graphics2D graphics, double x, double y, double tile) {
+        if (tutorialActor == null || tutorialProgress < 0 || tutorialProgress >= 1) return;
+        if (tutorialCapture != null) {
+            tutorialCapture.paint(graphics, x, y, tile, tutorialProgress);
+            return;
+        }
+        double along = tutorialProgress * (tutorialRoute.size() - 1);
+        int step = (int) along;
+        double fraction = along - step;
+        var point = tutorialRoute.get(step).toward(tutorialRoute.get(step + 1), fraction);
+        paintPiece(graphics, tutorialActor, x + point.x() * tile,
+                y + (point.y() - Math.sin(Math.PI * fraction) * .45) * tile, tile * .69, false, false);
+    }
     // hop animation: when a hero moves forward it jumps square by square to its new place (quickly)
     private GameSession watchedSession;
     private final Map<String,Integer> lastPathIndex=new HashMap<>();   // piece id -> path index at the previous update
@@ -195,7 +252,21 @@ public final class BoardPanel extends JPanel {
             if("-".equals(cell.symbol())) continue;
             drawSymbol(d,cell,x+(col-.5)*square,y+(row-.5)*square,square);
         }
+        if (!tutorialHighlights.isEmpty()) {
+            d.setStroke(new BasicStroke((float)Math.max(1.5, square * .10)));
+            for (String id : tutorialHighlights) {
+                var position = Board.Position.parse(id);
+                double left = x + (position.column() - .93) * square;
+                double top = y + (position.row() - .93) * square;
+                var outline = new RoundRectangle2D.Double(left, top, square * .86, square * .86, 6, 6);
+                d.setColor(new Color(24, 27, 47, 100));
+                d.fill(outline);
+                d.setColor(Theme.Tone.PRIMARY.color());
+                d.draw(outline);
+            }
+        }
         drawPieces(d,board,x,y,square);
+        paintTutorial(d,x,y,square);
         if (playback != null) playback.animation.paint(d, x, y, square, playback.progress());
         d.setColor(new Color(66,87,114));
         d.setStroke(new BasicStroke(2f));
@@ -364,7 +435,7 @@ private void drawCastles(Graphics2D d, Board board,
         for(Polygon triangle:quadrants) d.draw(triangle);
         d.setColor(new Color(244, 249, 255));
         d.setFont(Theme.font(Math.max(10f,(float)(s*.37)),Font.BOLD));
-        centerText(d,"HOME",cx,cy+(s*.12));
+        centerText(d, !interactive && Messages.isHebrew() ? "בית" : "HOME", cx, cy + s * .12);
     }
 
     /*
@@ -479,7 +550,7 @@ private void drawCastles(Graphics2D d, Board board,
             for(Piece piece:player.pieces()) {
                 if(piece.state()!=Piece.State.CASTLE && yard!=null) drawCastleShadow(d,piece,yard,s);
                 if(hopping && piece.id().equals(hopPieceId)) continue;      // drawn by the hop animation
-                if (playback != null && playback.animation.hides(piece)) continue;   // drawn by the capture animation
+                if ((playback != null && playback.animation.hides(piece)) || hidesTutorialPiece(piece)) continue;
                 if(piece.state()==Piece.State.CASTLE && yard!=null) {
                     // heroes waiting at home stand in a neat 2x2 group in the middle of their castle
                     double[] c=yardSpot(yard,piece.number());
@@ -518,7 +589,8 @@ private void drawCastles(Graphics2D d, Board board,
         int colorNumber=0;
         for(Player player:session.players()) {
             int count=0;
-            for(Piece piece:player.pieces()) if(piece.state()==Piece.State.FINISHED && !(hopping && piece.id().equals(hopPieceId))) {
+            for(Piece piece:player.pieces()) if(piece.state()==Piece.State.FINISHED
+                    && !(hopping && piece.id().equals(hopPieceId)) && !hidesTutorialPiece(piece)) {
                 double angle=Math.PI*2*(colorNumber+.25)/4;
                 double cx=centerX+Math.cos(angle)*s*(.55+count*.14);
                 double cy=centerY+Math.sin(angle)*s*(.55+count*.14);

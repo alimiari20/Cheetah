@@ -44,6 +44,7 @@ public final class HebrewMessages extends ListResourceBundle {
         Export History=>ייצוא היסטוריה
         Exit=>יציאה
         Rules & Controls=>כללים ומקשי שליטה
+        Watch Tutorial=>צפייה בהדרכה
         Admin Dashboard=>לוח ניהול
         HOW TO PLAY=>איך משחקים
         Exit Cheetah Ludo?=>לצאת מצ׳יטה לודו?

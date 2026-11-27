@@ -123,6 +123,11 @@
             <classpath><pathelement location="${build.dir}"/></classpath>
         </java>
 
+        <java classname="model.TutorialScriptTests" fork="true" failonerror="true">
+            <sysproperty key="java.awt.headless" value="true"/>
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+
         <java classname="model.RepositoryTests" fork="true" failonerror="true">
             <sysproperty key="java.awt.headless" value="true"/>
             <classpath>
@@ -153,6 +158,12 @@
 
     <target name="test-ai-desktop" depends="test">
         <java classname="model.AiSpecialFlowTests" fork="true" failonerror="true">
+            <classpath><pathelement location="${build.dir}"/></classpath>
+        </java>
+    </target>
+
+    <target name="test-tutorial-desktop" depends="test">
+        <java classname="view.TutorialWindowTests" fork="true" failonerror="true">
             <classpath><pathelement location="${build.dir}"/></classpath>
         </java>
     </target>
