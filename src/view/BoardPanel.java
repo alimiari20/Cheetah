@@ -352,12 +352,8 @@ private void drawCastles(Graphics2D d, Board board,
                                   new int[]{(int)(cy+r),(int)(cy+r),(int)cy},3);
         Polygon west=new Polygon(new int[]{(int)(cx-r),(int)(cx-r),(int)cx},
                                  new int[]{(int)(cy-r),(int)(cy+r),(int)cy},3);
-        PlayerColor top=board.difficulty()==Difficulty.EASY?PlayerColor.YELLOW:PlayerColor.GREEN;
-        PlayerColor right=board.difficulty()==Difficulty.EASY?PlayerColor.BLUE:PlayerColor.YELLOW;
-        PlayerColor bottom=board.difficulty()==Difficulty.EASY?PlayerColor.RED:PlayerColor.BLUE;
-        PlayerColor left=board.difficulty()==Difficulty.EASY?PlayerColor.GREEN:PlayerColor.RED;
         Polygon[] quadrants={north,east,south,west};
-        PlayerColor[] colors={top,right,bottom,left};
+        PlayerColor[] colors=goalColors(board.difficulty());
         for(int i=0;i<4;i++) {d.setColor(Theme.player(colors[i]));d.fill(quadrants[i]);}
         d.setStroke(new BasicStroke(1.5f));
         d.setColor(new Color(96,109,134));
@@ -365,6 +361,12 @@ private void drawCastles(Graphics2D d, Board board,
         d.setColor(new Color(244, 249, 255));
         d.setFont(Theme.font(Math.max(10f,(float)(s*.37)),Font.BOLD));
         centerText(d,"HOME",cx,cy+(s*.12));
+    }
+    /** Colour of each HOME triangle, in the order top, right, bottom, left. */
+    private static PlayerColor[] goalColors(Difficulty difficulty) {
+        return difficulty==Difficulty.EASY
+            ? new PlayerColor[]{PlayerColor.YELLOW,PlayerColor.BLUE,PlayerColor.RED,PlayerColor.GREEN}
+            : new PlayerColor[]{PlayerColor.GREEN,PlayerColor.YELLOW,PlayerColor.BLUE,PlayerColor.RED};
     }
 
     /*
@@ -512,20 +514,23 @@ private void drawCastles(Graphics2D d, Board board,
                 hitTargets.add(new Hit(piece.id(),cx,cy,Math.max(diameter*.53,9)));
             }
         }
-        // Finished pieces are represented by small tokens arranged around the center.
+        // Finished pieces stand in a row inside the HOME triangle of their own colour.
         int mid=board.size()/2;
         double centerX=x+(mid+.5)*s,centerY=y+(mid+.5)*s;
-        int colorNumber=0;
+        PlayerColor[] goal=goalColors(board.difficulty());
+        double[][] side={{0,-1},{1,0},{0,1},{-1,0}};                  // top, right, bottom, left
         for(Player player:session.players()) {
-            int count=0;
+            int k=Arrays.asList(goal).indexOf(player.color());
+            if(k<0) continue;
+            int count=0, total=0;
+            for(Piece piece:player.pieces()) if(piece.state()==Piece.State.FINISHED && !(hopping && piece.id().equals(hopPieceId))) total++;
             for(Piece piece:player.pieces()) if(piece.state()==Piece.State.FINISHED && !(hopping && piece.id().equals(hopPieceId))) {
-                double angle=Math.PI*2*(colorNumber+.25)/4;
-                double cx=centerX+Math.cos(angle)*s*(.55+count*.14);
-                double cy=centerY+Math.sin(angle)*s*(.55+count*.14);
-                paintPiece(d, piece, cx, cy, s * .25, false, false);
+                double out=s*.85, along=(count-(total-1)/2.0)*s*.32;     // into the triangle, side by side, centred
+                double cx=centerX+side[k][0]*out-side[k][1]*along;
+                double cy=centerY+side[k][1]*out+side[k][0]*along;
+                paintPiece(d, piece, cx, cy, s * .3, false, false);
                 count++;
             }
-            colorNumber++;
         }
         if(hopping && !drawHop(d,x,y,s)) repaint();   // hop finished: draw the hero in its real place next time
     }
